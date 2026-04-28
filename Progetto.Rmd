@@ -87,6 +87,13 @@ colData(SRP)$class_2way =
   case_when(grepl("brain tissue", sample_info)~"control",
             grepl("glioma", sample_info)~"glioma")
 
+# FACTORIALIZATION (really helpful in graphs and other procedures)
+
+colData(SRP)$class_3way = factor(colData(SRP)$class_3way, 
+                                  levels = c("control", "glioma_CE", "glioma_NE"))
+
+colData(SRP)$class_2way = factor(colData(SRP)$class_2way, 
+                                  levels = c("control", "glioma"))
 ```
 
 ## Unexpressed genes removal
@@ -94,13 +101,13 @@ colData(SRP)$class_2way =
 As a team, we decide to exclude genes with expression levels at 0 or really low levels in all samples here, before the EDA, and not in the quality control paragraph. We do this because we believe this row filtering is not a quality control but a basic definition of the rows we consider "data".
 
 ```{r}
-table(rowSums(assay(SRP, "raw_counts") == 0))
-table(rowSums(assay(SRP, "raw_counts") < 10))
+table(rowSums(assay(SRP, "raw_counts")) == 0)
+table(rowSums(assay(SRP, "raw_counts")) < 15)
 
 table(is.na(assay(SRP, "raw_counts"))) #good!
 table(duplicated(rownames(SRP))) #good!
 
-SRP = SRP[rowSums(assay(SRP, "raw_counts")) > 10, ]
+SRP = SRP[rowSums(assay(SRP, "raw_counts")) > 15, ]
 
 ```
 
