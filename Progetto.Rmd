@@ -3,13 +3,6 @@ title: "Molecular profiling of glioblastoma: spatial comparison against control 
 author: "Chiara Falleroni & Luca Marzilli"
 date: "`r Sys.Date()`"
 output:
-  html_document: 
-    toc: true
-    toc_float: true
-    theme: flatly
-    number_sections: true
-    fig_width: 8
-    fig_height: 6
   pdf_document:
     toc: False
     number_sections: true
@@ -17,6 +10,13 @@ output:
     fig_height: 6
     highlight: tango
     df_print: kable
+  html_document: 
+    toc: true
+    toc_float: true
+    theme: cosmo
+    number_sections: true
+    fig_width: 8
+    fig_height: 6
 editor_options: 
   markdown: 
     # chiedi a chiara se le piaciono gli output inline.
@@ -25,7 +25,7 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
 ```
 
 
@@ -33,11 +33,77 @@ knitr::opts_chunk$set(echo = TRUE)
 \tableofcontents
 \newpage
 
+```{r}
+library(omicsdata)
+library(SummarizedExperiment)
+library(tidyverse)
+```
+
 # Biological context and study objectives 
 
 # Experimental design 
 
-# Preprocessing 
+# Data and preprocessing 
+
+## Data loading and a brief look at it
+
+```{r}
+if (file.exists("SRP044668.rds")) {
+  SRP = readRDS("SRP044668.rds")
+} else {
+  stop("dear user: the necessary data is not present in the current working directory or 
+        does not have the right name, please check.")
+}
+```
+
+Let's give a look at the data's structure. 
+
+```{r}
+#str(SRP)
+dim(SRP)
+assays(SRP)
+```
+
+## Data subsetting
+
+We are now going to subset the data coherently with our goals.
+
+```{r}
+sample_info = colData(SRP)$sra.sample_attributes
+
+# Using new columns in the ColData I classify the columns (samples) of the 
+# dataset based on the type.
+
+# 3-way classification
+
+colData(SRP)$class_3way =
+  case_when(grepl("brain tissue", sample_info)~"control",
+            grepl("contrast-enhancing", sample_info)~"glioma_CE",
+            grepl("non-enhancing", sample_info)~"glioma_NE")
+
+# 2-way classification
+
+colData(SRP)$class_2way =
+  case_when(grepl("brain tissue", sample_info)~"control",
+            grepl("glioma", sample_info)~"glioma")
+
+```
+
+## Unexpressed genes removal
+
+As a team, we decide to exclude genes with expression levels at 0 or really low levels in all samples here, before the EDA, and not in the quality control paragraph. We do this because we believe this row filtering is not a quality control but a basic definition of the rows we consider "data".
+
+```{r}
+table(rowSums(assay(SRP, "raw_counts") == 0))
+table(rowSums(assay(SRP, "raw_counts") < 10))
+
+table(is.na(assay(SRP, "raw_counts"))) #good!
+table(duplicated(rownames(SRP))) #good!
+
+SRP = SRP[rowSums(assay(SRP, "raw_counts")) > 10, ]
+
+```
+
 
 # Pre-normalization EDA 
 
