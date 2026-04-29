@@ -34,9 +34,24 @@ knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
 \newpage
 
 ```{r}
+library(RColorBrewer)
 library(omicsdata)
 library(SummarizedExperiment)
 library(tidyverse)
+library(tibble)
+library(edgeR)
+library(limma)
+library(DESeq2)
+library(EDASeq)
+#install.packages("factoextra")
+library(factoextra)
+```
+
+```{r}
+Class_pal2way = c("control"="turquoise4", "glioma"="firebrick2")
+Class_pal3way = c("control"="turquoise4", "glioma_CE"="darkred", "glioma_NE"="salmon2")
+continuous_pal2 = colorRampPalette(c("plum1","purple4"))(100)
+continuous_pal3 = colorRampPalette(c("springgreen4", "antiquewhite1", "orangered2"))(100)
 ```
 
 # Biological context and study objectives 
@@ -69,6 +84,12 @@ assays(SRP)
 We are now going to subset the data coherently with our goals.
 
 ```{r}
+#sample_info = colData(SRP)$sra.sample_attributes 
+
+# re-ordering that annoying last observation with the other glioma_NE
+nuovo_ordine <- c(94, 1:93)
+SRP = SRP[, nuovo_ordine]
+
 sample_info = colData(SRP)$sra.sample_attributes
 
 # Using new columns in the ColData I classify the columns (samples) of the 
@@ -87,7 +108,7 @@ colData(SRP)$class_2way =
   case_when(grepl("brain tissue", sample_info)~"control",
             grepl("glioma", sample_info)~"glioma")
 
-# FACTORIALIZATION (really helpful in graphs and other procedures)
+# FACTORIALIZATION (necessary for graphs and other procedures)
 
 colData(SRP)$class_3way = factor(colData(SRP)$class_3way, 
                                   levels = c("control", "glioma_CE", "glioma_NE"))
@@ -98,7 +119,7 @@ colData(SRP)$class_2way = factor(colData(SRP)$class_2way,
 
 ## Unexpressed genes removal
 
-As a team, we decide to exclude genes with expression levels at 0 or really low levels in all samples here, before the EDA, and not in the quality control paragraph. We do this because we believe this row filtering is not a quality control but a basic definition of the rows we consider "data".
+As a team, we decide to exclude genes with expression levels at 0 or extremely low levels in all samples here, before the EDA, and not in the quality control paragraph. We do this because we believe this row filtering is not a quality control but a basic definition of the rows we consider "data". We also decide to use the FilterByExpr (from edgeR) function, a much more statistically reliable tool.
 
 ```{r}
 table(rowSums(assay(SRP, "raw_counts")) == 0)
@@ -107,12 +128,128 @@ table(rowSums(assay(SRP, "raw_counts")) < 15)
 table(is.na(assay(SRP, "raw_counts"))) #good!
 table(duplicated(rownames(SRP))) #good!
 
-SRP = SRP[rowSums(assay(SRP, "raw_counts")) > 15, ]
+dim(SRP)
+keep = filterByExpr(assay(SRP, "raw_counts"), group = SRP$class_3way)
+SRP = SRP[keep, ]
+dim(SRP)
 
 ```
 
 
 # Pre-normalization EDA 
+
+Now, before proceeding, we will use some graphical tools to investigate the general nature of our counts. This analysis is going to be helpful in guiding us through the right choices in the next section: data normalization and quality control.
+
+## Analysis of the genetic expression distribution in the samples
+
+```{r}
+
+meta_df = data.frame(Sample=colnames(SRP), Class2way=SRP$class_2way, Class3way=SRP$class_3way)
+
+dfCounts_long = as.data.frame(assay(SRP, "raw_counts")) |>
+  rownames_to_column(var="Gene") |>
+  pivot_longer(cols=-Gene, names_to = "Sample", values_to = "Expression")
+
+dfCounts_long = dfCounts_long |> left_join(meta_df, by = "Sample")
+
+somechosensamples = c("SRR1521363", "SRR1521352", "SRR1521353", "SRR1521354", 
+                      "SRR1521355", "SRR1521356", "SRR1521357", "SRR1521358",
+                      "SRR1521392", "SRR1521393", "SRR1521394", "SRR1521395", 
+                      "SRR1521396", "SRR1521397", "SRR1521398", "SRR1521399",
+                      "SRR1521440", "SRR1521441", "SRR1521442", "SRR1521443", 
+                      "SRR1521444", "SRR1521445")
+
+dfCounts_long |>
+  filter(Sample %in% somechosensamples) |>
+  ggplot( aes(x=Sample, y=Expression, fill = Class2way)) +
+  geom_boxplot() +
+  scale_fill_manual(values=Class_pal2way) +
+  theme(
+    axis.text.x = element_blank(),  
+    axis.ticks.x = element_blank(), 
+    axis.title.x = element_blank()  
+  )
+
+  
+```
+This are boxplots of the expression levels of some randomly chosen samples. As seen in the laboratories, we clearly need a logarithmic transformation.
+
+```{r}
+dfCounts_long$Expression = log1p(dfCounts_long$Expression)
+
+dfCounts_long |>
+  filter(Sample %in% somechosensamples) |>
+  ggplot( aes(x=Sample, y=Expression, fill = Class2way)) +
+  geom_boxplot() +
+  scale_fill_manual(values=Class_pal2way) +
+  theme(
+    axis.text.x = element_blank(),  
+    axis.ticks.x = element_blank(), 
+    axis.title.x = element_blank())
+
+# creation of a new log1p assay in the SRP summarized experiment object
+assays(SRP)$logcounts <- log1p(assay(SRP, "raw_counts"))
+
+```
+Now the distributions are much better.
+
+Here we show the distribution densities conditioned on the sample class of the expressions.
+
+```{r}
+dfCounts_long |>
+  ggplot(aes(x=Expression, fill=Class2way, colour = Class2way)) +
+        geom_density(alpha=0.4) +
+        scale_fill_manual(values = Class_pal2way) +
+        scale_color_manual(values = Class_pal2way)
+
+dfCounts_long |>
+  ggplot(aes(x=Expression, fill=Class2way, colour = Class3way)) +
+        geom_density(alpha=0.4) +
+        scale_fill_manual(values = Class_pal3way) +
+        scale_color_manual(values = Class_pal3way)
+```
+## MD, MA and RLE plots
+
+### MA
+
+```{r}
+limma::plotMA(assay(SRP, "logcounts"))
+```
+
+Here the limma's plotMA() function is working as a quality control tool. It's confronting the first sample with the mean of the others, and the asymmetries clearly comunicate us the need for normalization.
+
+### MD
+
+```{r}
+EDASeq::MDPlot(assay(SRP, "raw_counts"), c(6, 7))
+```
+
+### RLE
+
+```{r}
+plotRLE(assay(SRP,"raw_counts"), outline = FALSE, las = 2,
+        ylab = "RLE", main = "RLE of raw counts", col = Class_pal3way)
+```
+
+Both the MD and RLE plots strengthen what was already visible in the MA: the data need normalization.
+
+## PCA
+
+```{r}
+pca = prcomp(t(assay(SRP, "logcounts")))
+screeplot(pca)
+
+fviz_pca_ind(pca,
+             geom.ind = "point",       
+             pointsize = 1,            
+             col.ind = SRP$class_3way,      
+             palette = Class_pal3way,       
+             addEllipses = TRUE,       
+             ellipse.type = "convex")
+```
+
+Finally, we here performed and plotted a pca on the un-normalized data. 
+
 
 # Data normalization and quality control
 
@@ -125,6 +262,7 @@ SRP = SRP[rowSums(assay(SRP, "raw_counts")) > 15, ]
 # ALTRO è PUNTI BONUSSSS
 
 # Conclusions
+
 
 
 
