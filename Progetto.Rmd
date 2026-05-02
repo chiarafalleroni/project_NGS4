@@ -65,6 +65,16 @@ In contrast, **non-enhancing (NE)** tumor regions refer to the infiltrative marg
 In this study, we analyze RNA-seq data from glioma and non-neoplastic brain tissues to investigate differences in gene expression profiles. Specifically, we aim to compare tumor samples with normal brain tissue and to further explore differences between CE and NE tumor regions. This allows us to assess how cellular composition and tumor heterogeneity influence gene expression patterns.
 
 
+
+The main objectives of this analysis are:  
+
+- to identify genes differentially expressed between glioma and non-neoplastic tissues;  
+- to evaluate the extent to which tumor samples differ from normal brain tissue at the transcriptomic level;  
+- to investigate how different tumor regions (CE vs NE) contribute to variability in gene expression;  
+- to interpret the results in light of cellular heterogeneity and tumor microenvironment.
+
+
+
 # Experimental design 
 
 # Data and preprocessing 
