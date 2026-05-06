@@ -274,10 +274,180 @@ fviz_pca_ind(pca,
 
 Finally, we here performed and plotted a pca on the un-normalized data. 
 
+## GC content bias evaluation  
+GC content can introduce biases in library preparation and sequencing, potentially affecting the quantification of gene expression.
+It's important to check GC content bias for eventually filtering out sequences.  
+First, we need to retrieve the amount of *GC* for each gene. To do this we use the **rowRanges** row variables and the **getGeneLengthAndGCContent** function of the *EDASeq* package.
+
+```{r}
+#Gene ID extraction and annotation retrieval
+gene_ids = as.character(rowRanges(SRP)$gene_id)
+gene_ids = sub("\\..*$", "", gene_ids)
+
+gc_info = getGeneLengthAndGCContent(
+  id = gene_ids,
+  org = "hg38",
+  mode = "org.db"
+)
+```
+
+Gene identifiers were extracted from the dataset and processed to remove version numbers. GC content and gene length information were then retrieved using EDASeq annotation functions based on the hg38 reference genome.
+
+```{r}
+#Data cleaning and alignment
+gc_info = gc_info[!is.na(gc_info[, 2]), ]
+
+valid_genes = gene_ids %in% rownames(gc_info)
+
+SRP_filtered = SRP[valid_genes, ]
+gene_ids = gene_ids[valid_genes]
+```
+
+Genes lacking GC content information were removed.  
+The dataset was then aligned with the annotation data to retain only genes with available GC information, ensuring consistency between expression data and gene features.
+
+```{r}
+#Count matrix preparation
+counts_matrix = assay(SRP_filtered, "raw_counts")
+
+rownames(counts_matrix) = gene_ids
+```
+
+The raw count matrix was extracted and gene identifiers were standardized to ensure consistency with the annotation dataset.
+
+```{r}
+#Removal of duplicated genes
+dup_genes = duplicated(rownames(counts_matrix))
+
+counts_matrix = counts_matrix[!dup_genes, ]
+gc_info = gc_info[!dup_genes, ]
+SRP_filtered = SRP_filtered[!dup_genes, ]
+```
+
+Duplicated gene identifiers, arising from multiple transcript mappings, were removed to ensure a one-to-one correspondence between genes and expression values.
+
+```{r}
+#Construction of SeqExpressionSet
+seq_set = newSeqExpressionSet(
+  counts = counts_matrix,
+  phenoData = AnnotatedDataFrame(
+    data.frame(
+      condition = SRP_filtered$class_3way,
+      row.names = colnames(counts_matrix)
+    )
+  ),
+  featureData = AnnotatedDataFrame(
+    data.frame(
+      gc_content = gc_info[, 2],
+      gene_length = gc_info[, 1]
+    )
+  )
+)
+```
+
+A SeqExpressionSet object was constructed to integrate expression data with sample metadata and gene-level features, including GC content and gene length, enabling downstream bias analysis.
+
+```{r}
+#GC bias plot
+biasPlot(seq_set, "gc_content", log = TRUE)
+```
+The GC bias plot shows a clear non-linear relationship between gene expression and GC content across all samples. Expression levels increase at intermediate GC values and decrease at both low and high GC content, indicating the presence of GC-dependent technical bias. The consistency of this pattern across samples suggests that the bias is systematic rather than sample-specific.
+
+GC content bias was evaluated as part of the quality assessment to investigate potential gene-specific technical effects. Although a GC-dependent trend was observed, normalization was subsequently performed using DESeq2, which accounts for major sources of between-sample variability. Therefore, GC bias was not explicitly corrected but considered in the interpretation of the results.
+
 
 # Data normalization and quality control
 
+Although GC-dependent bias was observed during exploratory analysis, normalization was performed using DESeq2, which accounts for major sources of between-sample variability. Additional within-sample normalization was not applied to maintain consistency with the statistical modeling framework.
+
+
+## Data extraction and DESeq2 dataset construction
+
+```{r}
+counts_matrix = assay(SRP, "raw_counts")
+
+colData(SRP)$class_2way = factor(colData(SRP)$class_2way)
+
+metadata = as.data.frame(colData(SRP))
+
+
+dds = DESeqDataSetFromMatrix(
+  countData = counts_matrix,
+  colData = metadata,
+  design = ~ class_2way
+)
+
+dds = dds[rowSums(counts(dds)) > 10, ]
+```
+
+A DESeq2 dataset object was created by combining the raw count matrix with sample metadata and specifying the experimental design based on the class_2way variable.  
+A light additional filtering step was applied to remove residual low-count genes and ensure robustness in downstream analysis.
+
+## DESeq2 normalization
+
+```{r}
+dds = DESeq(dds)
+```
+
+Normalization was carried out within the DESeq2 framework through the estimation of size factors, correcting for differences in sequencing depth and compositional biases across samples.
+
+## Variance stabilizing transformation (VST)
+```{r}
+vsd = vst(dds, blind = FALSE)
+```
+
+A variance stabilizing transformation (VST) was then applied to reduce the dependence of variance on mean expression levels, making the data more suitable for exploratory analyses such as PCA and clustering.
+
+
 # Post-normalization EDA
+
+Post-normalization quality control is perform to assess the effectiveness of the normalization procedure. In particular, boxplots and Relative Log Expression (RLE) plots are used to evaluate the distribution of expression values across samples and to verify the reduction of technical variability. 
+These visualizations allow us to determine whether samples are comparable and suitable for downstream analyses.
+
+## Boxplot
+
+```{r}
+group_colors = ifelse(colData(SRP)$class_2way == "glioma", "hotpink", "lightblue")
+
+boxplot(assay(vsd),
+        outline = FALSE,
+        las = 2,
+        col=group_colors,
+        ylab = "Expression (VST)",
+        main = "Boxplot after normalization")
+```
+Boxplots of variance-stabilized data show highly consistent expression distributions across samples after normalization.  
+The alignment of medians and the comparable spread of values indicate that technical variability has been effectively reduced, making the samples suitable for downstream comparative analysis.
+
+## RLE plot 
+
+```{r}
+group_colours = ifelse(colData(SRP)$class_2way == "glioma", "orange", "violet")
+
+plotRLE(assay(vsd),
+        outline = FALSE,
+        las = 2,
+        col=group_colours,
+        ylab = "RLE",
+        main = "RLE after normalization")
+```
+The RLE plot shows values centered around zero with a consistent spread across samples, indicating that normalization effectively reduced technical variability.
+A small number of samples display slight deviations from the overall trend, but these remain limited and do not suggest the presence of strong outliers or residual technical bias. Overall, the data appear well-balanced and suitable for downstream analysis.
+
+Now we perform Principal Component Analysis (PCA) on variance-stabilized data to investigate the main sources of variation within the dataset and to evaluate the separation between biological groups. This analysis enables visualization of sample clustering patterns and helps assess whether normalization preserves biologically meaningful differences.
+
+## PCA
+
+```{r}
+pca = prcomp(t(assay(vsd)))
+
+plot(pca$x[,1], pca$x[,2],
+     col = ifelse(colData(SRP)$class_2way == "glioma", "hotpink", "lightblue"),
+     pch = 19,
+     xlab = "PC1", ylab = "PC2")
+```
+The PCA plot shows a partial separation between glioma and control samples along the first principal component, indicating that biological differences contribute significantly to the overall variability.  
+Control samples tend to cluster more tightly, while glioma samples display greater dispersion, reflecting higher heterogeneity within the tumor group. A certain degree of overlap is observed, likely due to the presence of non-neoplastic components within glioma samples or infiltrative tumor regions.  Overall, the distribution of samples suggests that normalization was effective and that biologically relevant variation is captured by the principal components.
 
 # Identification of DEGs
 
