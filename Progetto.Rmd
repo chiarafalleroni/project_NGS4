@@ -45,12 +45,15 @@ library(DESeq2)
 library(EDASeq)
 #install.packages("factoextra")
 library(factoextra)
+#BiocManager::install("ComplexHeatmap")
+library(ComplexHeatmap)
+library(biomaRt)
 ```
 
 ```{r}
 Class_pal2way = c("control"="turquoise4", "glioma"="firebrick2")
 Class_pal3way = c("control"="turquoise4", "glioma_CE"="darkred", "glioma_NE"="salmon2")
-continuous_pal2 = colorRampPalette(c("plum1","purple4"))(100)
+continuous_pal2 = colorRampPalette(c("white","plum1","purple4"))(100)
 continuous_pal3 = colorRampPalette(c("springgreen4", "antiquewhite1", "orangered2"))(100)
 ```
 
@@ -213,23 +216,21 @@ dfCounts_long = as.data.frame(assay(SRP, "raw_counts")) |>
 
 dfCounts_long = dfCounts_long |> left_join(meta_df, by = "Sample")
 
-somechosensamples = c("SRR1521363", "SRR1521352", "SRR1521353", "SRR1521354", 
-                      "SRR1521355", "SRR1521356", "SRR1521357", "SRR1521358",
-                      "SRR1521392", "SRR1521393", "SRR1521394", "SRR1521395", 
-                      "SRR1521396", "SRR1521397", "SRR1521398", "SRR1521399",
-                      "SRR1521440", "SRR1521441", "SRR1521442", "SRR1521443", 
-                      "SRR1521444", "SRR1521445")
+#dfCounts_long |>
+#  ggplot( aes(x=Sample, y=Expression, fill = Class2way)) +
+#  geom_boxplot() +
+#  scale_fill_manual(values=Class_pal2way) +
+#  theme(
+#    axis.text.x = element_blank(),  
+#    axis.ticks.x = element_blank(), 
+#    axis.title.x = element_blank()  
+#  )
 
-dfCounts_long |>
-  filter(Sample %in% somechosensamples) |>
-  ggplot( aes(x=Sample, y=Expression, fill = Class2way)) +
-  geom_boxplot() +
-  scale_fill_manual(values=Class_pal2way) +
-  theme(
-    axis.text.x = element_blank(),  
-    axis.ticks.x = element_blank(), 
-    axis.title.x = element_blank()  
-  )
+boxplot(assay(SRP, "raw_counts"),
+        las = 2,
+        col=Class_pal2way[colData(SRP)$class_2way],
+        #ylab = "Expression (raw)",
+        main = "Boxplot of raw counts")
 
   
 ```
@@ -238,18 +239,24 @@ This are boxplots of the expression levels of some randomly chosen samples. As s
 ```{r}
 dfCounts_long$Expression = log1p(dfCounts_long$Expression)
 
-dfCounts_long |>
-  filter(Sample %in% somechosensamples) |>
-  ggplot( aes(x=Sample, y=Expression, fill = Class2way)) +
-  geom_boxplot() +
-  scale_fill_manual(values=Class_pal2way) +
-  theme(
-    axis.text.x = element_blank(),  
-    axis.ticks.x = element_blank(), 
-    axis.title.x = element_blank())
+#dfCounts_long |>
+#  ggplot( aes(x=Sample, y=Expression, fill = Class2way)) +
+#  geom_boxplot() +
+#  scale_fill_manual(values=Class_pal2way) +
+#  theme(
+#    axis.text.x = element_blank(),  
+#    axis.ticks.x = element_blank(), 
+#    axis.title.x = element_blank())
 
 # creation of a new log1p assay in the SRP summarized experiment object
 assays(SRP)$logcounts <- log1p(assay(SRP, "raw_counts"))
+
+boxplot(assay(SRP, "logcounts"),
+        #outline = FALSE,
+        las = 2,
+        col=Class_pal2way[colData(SRP)$class_2way],
+        ylab = "Expression (log1p)",
+        main = "Boxplot after log1p transformation")
 
 ```
 Now the distributions are much better.
@@ -269,6 +276,7 @@ dfCounts_long |>
         scale_fill_manual(values = Class_pal3way) +
         scale_color_manual(values = Class_pal3way)
 ```
+
 ## MD, MA and RLE plots
 
 ### MA
@@ -289,7 +297,7 @@ EDASeq::MDPlot(assay(SRP, "raw_counts"), c(6, 7))
 
 ```{r}
 plotRLE(assay(SRP,"raw_counts"), outline = FALSE, las = 2,
-        ylab = "RLE", main = "RLE of raw counts", col = Class_pal3way)
+        ylab = "RLE", main = "RLE of raw counts", col = Class_pal3way[colData(SRP)$class_3way])
 ```
 
 Both the MD and RLE plots strengthen what was already visible in the MA: the data need normalization.
@@ -309,7 +317,7 @@ fviz_pca_ind(pca,
              ellipse.type = "convex")
 ```
 
-Finally, we here performed and plotted a pca on the un-normalized data. 
+Lastly, we here performed and plotted a pca on the un-normalized data. 
 
 ## GC content bias evaluation  
 GC content can introduce biases in library preparation and sequencing, potentially affecting the quantification of gene expression.
@@ -401,24 +409,18 @@ Although GC-dependent bias was observed during exploratory analysis, normalizati
 ## Data extraction and DESeq2 dataset construction
 
 ```{r}
-counts_matrix = assay(SRP, "raw_counts")
-
-colData(SRP)$class_2way = factor(colData(SRP)$class_2way)
-
+counts_matrix = assay(SRP_filtered, "raw_counts")
 metadata = as.data.frame(colData(SRP))
-
 
 dds = DESeqDataSetFromMatrix(
   countData = counts_matrix,
   colData = metadata,
-  design = ~ class_2way
+  design = ~ class_3way
 )
 
-dds = dds[rowSums(counts(dds)) > 10, ]
 ```
 
-A DESeq2 dataset object was created by combining the raw count matrix with sample metadata and specifying the experimental design based on the class_2way variable.  
-A light additional filtering step was applied to remove residual low-count genes and ensure robustness in downstream analysis.
+A DESeq2 dataset object was created by combining the raw count matrix with sample metadata and specifying the experimental design based on the class_3way variable.  
 
 ## DESeq2 normalization
 
@@ -433,38 +435,66 @@ Normalization was carried out within the DESeq2 framework through the estimation
 vsd = vst(dds, blind = FALSE)
 ```
 
-A variance stabilizing transformation (VST) was then applied to reduce the dependence of variance on mean expression levels, making the data more suitable for exploratory analyses such as PCA and clustering.
+A variance stabilizing transformation (VST) was then applied to reduce the dependence of variance on mean expression levels, making the data more suitable for exploratory analyses and visualization such as PCA and clustering. The VST is much more robust to distortions than simple log1p transformation.
 
 
 # Post-normalization EDA
 
-Post-normalization quality control is perform to assess the effectiveness of the normalization procedure. In particular, boxplots and Relative Log Expression (RLE) plots are used to evaluate the distribution of expression values across samples and to verify the reduction of technical variability. 
+Post-normalization quality control is performed to assess the effectiveness of the normalization procedure. In particular, boxplots and Relative Log Expression (RLE) plots are used to evaluate the distribution of expression values across samples and to verify the reduction of technical variability. 
 These visualizations allow us to determine whether samples are comparable and suitable for downstream analyses.
 
 ## Boxplot
 
 ```{r}
-group_colors = ifelse(colData(SRP)$class_2way == "glioma", "hotpink", "lightblue")
-
 boxplot(assay(vsd),
-        outline = FALSE,
+        #outline = FALSE,
         las = 2,
-        col=group_colors,
+        col=Class_pal2way[colData(vsd)$class_2way],
         ylab = "Expression (VST)",
         main = "Boxplot after normalization")
+
+
+meta_df = data.frame(Sample=colnames(vsd), Class2way=SRP$class_2way, Class3way=SRP$class_3way)
+
+dfCounts_long = as.data.frame(assay(vsd)) |>
+  rownames_to_column(var="Gene") |>
+  pivot_longer(cols=-Gene, names_to = "Sample", values_to = "Expression")
+
+dfCounts_long = dfCounts_long |> left_join(meta_df, by = "Sample")
+
+#dfCounts_long |>
+#  ggplot( aes(x=Sample, y=Expression, fill = Class2way)) +
+#  geom_boxplot() +
+#  scale_fill_manual(values=Class_pal2way) +
+#  theme(
+#    axis.text.x = element_blank(),  
+#    axis.ticks.x = element_blank(), 
+#    axis.title.x = element_blank()  
+# )
+
 ```
 Boxplots of variance-stabilized data show highly consistent expression distributions across samples after normalization.  
 The alignment of medians and the comparable spread of values indicate that technical variability has been effectively reduced, making the samples suitable for downstream comparative analysis.
 
+## Density plot
+
+```{r}
+dfCounts_long |>
+  ggplot(aes(x=Expression, fill=Class2way, colour = Class2way)) +
+        geom_density(alpha=0.4) +
+        scale_fill_manual(values = Class_pal2way) +
+        scale_color_manual(values = Class_pal2way) +
+        labs(title = "Density Plot after VST Normalization")
+```
+The density plot of VST-normalized data shows a characteristic shift of unexpressed genes to a baseline value of approximately 9. This offset is the expected mathematical behavior of the Variance Stabilizing Transformation, which stabilizes the variance at the lower end of expression. Most importantly, the perfect overlap of the density curves across the experimental groups confirms that technical biases have been successfully mitigated, ensuring the samples are robustly comparable for downstream analyses.
+
 ## RLE plot 
 
 ```{r}
-group_colours = ifelse(colData(SRP)$class_2way == "glioma", "orange", "violet")
-
 plotRLE(assay(vsd),
         outline = FALSE,
         las = 2,
-        col=group_colours,
+        col=Class_pal3way[colData(vsd)$class_3way],
         ylab = "RLE",
         main = "RLE after normalization")
 ```
@@ -477,14 +507,151 @@ Now we perform Principal Component Analysis (PCA) on variance-stabilized data to
 
 ```{r}
 pca = prcomp(t(assay(vsd)))
+screeplot(pca)
 
-plot(pca$x[,1], pca$x[,2],
-     col = ifelse(colData(SRP)$class_2way == "glioma", "hotpink", "lightblue"),
-     pch = 19,
-     xlab = "PC1", ylab = "PC2")
+fviz_pca_ind(pca,
+             geom.ind = "point",       
+             pointsize = 1,            
+             col.ind = vsd$class_3way,      
+             palette = Class_pal3way,       
+             addEllipses = TRUE,       
+             ellipse.type = "convex")
 ```
 The PCA plot shows a partial separation between glioma and control samples along the first principal component, indicating that biological differences contribute significantly to the overall variability.  
 Control samples tend to cluster more tightly, while glioma samples display greater dispersion, reflecting higher heterogeneity within the tumor group. A certain degree of overlap is observed, likely due to the presence of non-neoplastic components within glioma samples or infiltrative tumor regions.  Overall, the distribution of samples suggests that normalization was effective and that biologically relevant variation is captured by the principal components.
+
+Due to the Screeplot similar PC2 and PC3 variances we also plot here in the post-normalization EDA a graph made with PC1 and PC3 as axes.
+
+```{r}
+fviz_pca_ind(pca,
+             geom.ind = "point", 
+             axes = c(1,3),
+             pointsize = 1,            
+             col.ind = vsd$class_3way,      
+             palette = Class_pal3way,       
+             addEllipses = TRUE,       
+             ellipse.type = "convex")
+```
+Interestingly, the PC3 axis spreads the data points quite similarly to the PC2 (they probably go alongside, even if they are independent by definition). Let's try to plot the PC2 and the PC3 together then.
+
+```{r}
+fviz_pca_ind(pca,
+             geom.ind = "point", 
+             axes = c(2,3),
+             pointsize = 1,            
+             col.ind = vsd$class_3way,      
+             palette = Class_pal3way,       
+             addEllipses = TRUE,       
+             ellipse.type = "convex")
+```
+Actually, the PC2 goes approximately alongside the PC3 only for control and glioma_NE points, In glioma_CE they seem to be inversely correlated (even if, as already said, they must be orthogonal by definition when we look at the whole data points)!
+
+### Consulting the PCA runes: a forecast of DEGs
+
+```{r}
+pc1_loadings = pca$rotation[,1]
+sorted_pc1_loadings = pc1_loadings[order(abs(pc1_loadings), decreasing = TRUE)]
+pc1_var_drivers_df = data.frame(names(sorted_pc1_loadings[1:10]), as.numeric(sorted_pc1_loadings[1:10]))
+colnames(pc1_var_drivers_df) = c("Gene", "Contribution to PC1")
+
+pc1_var_drivers_df$Gene_clean <- gsub("\\..*", "", pc1_var_drivers_df$Gene)
+
+mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+gene_symbols <- getBM(
+  attributes = c("ensembl_gene_id", "external_gene_name"),
+  filters = "ensembl_gene_id",
+  values = pc1_var_drivers_df$Gene_clean,
+  mart = mart
+)
+
+pc1_var_drivers_df =
+  pc1_var_drivers_df |> 
+  left_join(gene_symbols, by = c("Gene_clean" = "ensembl_gene_id"))
+
+colnames(pc1_var_drivers_df) = c("Ensembl ID", "Contribution to PC1", "Clean ensembl ID", "Gene name")
+pc1_var_drivers_df = pc1_var_drivers_df[, c(4, 1, 3, 2)]
+
+pc1_var_drivers_df
+
+```
+```{r}
+pc2_loadings = pca$rotation[,2]
+sorted_pc2_loadings = pc2_loadings[order(abs(pc2_loadings), decreasing = TRUE)]
+pc2_var_drivers_df = data.frame(names(sorted_pc2_loadings[1:10]), as.numeric(sorted_pc2_loadings[1:10]))
+colnames(pc2_var_drivers_df) = c("Gene", "Contribution to PC2")
+
+pc2_var_drivers_df$Gene_clean <- gsub("\\..*", "", pc2_var_drivers_df$Gene)
+
+gene_symbols <- getBM(
+  attributes = c("ensembl_gene_id", "external_gene_name"),
+  filters = "ensembl_gene_id",
+  values = pc2_var_drivers_df$Gene_clean,
+  mart = mart
+)
+
+pc2_var_drivers_df =
+  pc2_var_drivers_df |> 
+  left_join(gene_symbols, by = c("Gene_clean" = "ensembl_gene_id"))
+
+colnames(pc2_var_drivers_df) = c("Ensembl ID", "Contribution to PC2", "Clean ensembl ID", "Gene name")
+pc2_var_drivers_df = pc2_var_drivers_df[, c(4, 1, 3, 2)]
+
+pc2_var_drivers_df
+
+```
+```{r}
+pc3_loadings = pca$rotation[,3]
+sorted_pc3_loadings = pc3_loadings[order(abs(pc3_loadings), decreasing = TRUE)]
+pc3_var_drivers_df = data.frame(names(sorted_pc3_loadings[1:10]), as.numeric(sorted_pc3_loadings[1:10]))
+colnames(pc3_var_drivers_df) = c("Gene", "Contribution to PC3")
+
+pc3_var_drivers_df$Gene_clean <- gsub("\\..*", "", pc3_var_drivers_df$Gene)
+
+gene_symbols <- getBM(
+  attributes = c("ensembl_gene_id", "external_gene_name"),
+  filters = "ensembl_gene_id",
+  values = pc3_var_drivers_df$Gene_clean,
+  mart = mart
+)
+
+pc3_var_drivers_df =
+  pc3_var_drivers_df |> 
+  left_join(gene_symbols, by = c("Gene_clean" = "ensembl_gene_id"))
+
+colnames(pc3_var_drivers_df) = c("Ensembl ID", "Contribution to PC2", "Clean ensembl ID", "Gene name")
+pc3_var_drivers_df = pc3_var_drivers_df[, c(4, 1, 3, 2)]
+
+pc3_var_drivers_df
+
+```
+
+INTERPRETARE GENI E FARE IPOTESI DEL CATSO
+
+## Sample-to-sample correlation heatmap
+
+```{r}
+
+cor_matrix = cor(assay(vsd), method = "pearson")
+
+annot_info = HeatmapAnnotation(
+  df = data.frame(Class = colData(vsd)$class_3way),
+  col = list(Class = Class_pal3way), 
+  show_legend = TRUE
+)
+
+Heatmap(cor_matrix,
+        name = "Pearson\nCorr",
+        top_annotation = annot_info,
+        col = continuous_pal2, 
+        cluster_rows = TRUE, 
+        cluster_columns = TRUE,
+        show_row_names = FALSE,
+        show_column_names = FALSE,
+        column_title = "Sample Correlation Matrix (VST Data)",
+        row_title = "Samples")
+```
+The sample correlation heatmap, based on Pearson correlation of VST-normalized counts, reveals high transcriptomic similarity across the cohort (person correlation $>0.75$), confirming the absence of technical outliers. Hierarchical clustering effectively identifies distinct blocks of correlation, primarily separating control brain tissues from tumor core (CE) samples. However, the partial intermixing of non-enhancing (NE) margin samples reflects the infiltrative nature of the disease, where the transcriptomic profile is a heterogeneous mixture of neoplastic and normal glial components. Overall, the clear clustering patterns validate the effectiveness of the DESeq2 normalization in preserving biologically relevant variation.
 
 # Identification of DEGs
 
