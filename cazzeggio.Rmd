@@ -35,8 +35,8 @@ SRP044668 = SRP044668[rowS]
 
 ```{r}
 data = data[rowSum]
-
-
+readRDS("SRP044668.rds")
+colnames(colData("SRP"))
 
 info = colData(SRP044668)$sra.sample_attributes
 head(info)
