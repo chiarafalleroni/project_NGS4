@@ -630,9 +630,20 @@ pc3_var_drivers_df
 ```
 
 
-PCA PER CONTROLLO MASCHI-FEMMINE
+#### PCA PER CONTROLLO MASCHI-FEMMINE
 
-#analisi preliminare
+analisi preliminare
+
+```{r}
+estimated_sex = ifelse(
+  colData(SRP)$`recount_qc.aligned_reads%.chry` > 0.04,
+  "male",
+  "female"
+)
+
+```
+
+
 ```{r}
 table(estimated_sex, colData(SRP)$class_2way)
 ```
@@ -646,11 +657,7 @@ summary(colData(SRP)$`recount_qc.aligned_reads%.chry`)
 ```
 
 ```{r}
-estimated_sex = ifelse(
-  colData(SRP)$`recount_qc.aligned_reads%.chry` > 0.05,
-  "male",
-  "female"
-)
+
 ```
 
 #per plotting
@@ -724,6 +731,7 @@ grazie al modello che abbiamo usato è molto semplice identificare i DEGs, lo fa
 
 #glioma_ne - control
 res_ne = results(dds, contrast = c("class_3way", "glioma_NE", "control"))
+
 print(res_ne)
 ```
 
@@ -751,15 +759,99 @@ res_ne_ce = na.omit(res_ne_ce)
 i punti vicino a zero non sono differenziali, quelli lontani da zero sono molto differenziali
 ```{r}
 plotMA(
+  res_ce,
+  ylim = c(-8, 8),
+  colSig = "deeppink1",
+  colNonSig = "grey58",
+  main = "MA plot: glioma_CE vs control"
+)
+
+plotMA(
+  res_ne,
+  ylim = c(-8, 8),
+  colSig = "deeppink1",
+  colNonSig = "grey58",
+  main = "MA plot: glioma_NE vs control"
+)
+
+plotMA(
   res_ne_ce,
   ylim = c(-8, 8),
+  colSig = "deeppink1",
+  colNonSig = "grey58",
   main = "MA plot: glioma_NE vs glioma_CE"
 )
+
 ```
 The MA plot comparing glioma_NE and glioma_CE samples shows that the majority of genes are distributed around a log2 fold change close to zero, indicating similar expression levels between the two tumor regions. Nevertheless, a subset of genes displays substantial positive or negative fold changes, suggesting the presence of transcriptional differences between contrast-enhancing and non-enhancing glioma areas. The relatively compact distribution compared to tumor-versus-control comparisons reflects the higher biological similarity between the two glioma subtypes.
 
 ## VOLCANO PLOT
 ```{r}
+
+#prepariamo il dataframe
+res_df = as.data.frame(res_ce)
+
+#prepariamo la colonna di significatività 
+res_df$significant = ifelse(
+  res_df$padj < 0.05 &
+  abs(res_df$log2FoldChange) > 1,
+  "Significant",
+  "Not significant"
+)
+
+#volcano plot
+ggplot(res_df,
+       aes(x = log2FoldChange,
+           y = -log10(padj),
+           color = significant)) +
+
+  geom_point(alpha = 0.6, size = 1.5) +
+
+  scale_color_manual(values = c(
+    "Not significant" = "grey58",
+    "Significant" = "deeppink1"
+  )) +
+
+  theme_minimal() +
+
+  labs(
+    title = "Volcano plot glioma_CE vs control",
+    x = "Log2 Fold Change",
+    y = "-Log10 adjusted p-value"
+  )
+
+#prepariamo il dataframe
+res_df = as.data.frame(res_ne)
+
+#prepariamo la colonna di significatività 
+res_df$significant = ifelse(
+  res_df$padj < 0.05 &
+  abs(res_df$log2FoldChange) > 1,
+  "Significant",
+  "Not significant"
+)
+
+#volcano plot
+ggplot(res_df,
+       aes(x = log2FoldChange,
+           y = -log10(padj),
+           color = significant)) +
+
+  geom_point(alpha = 0.6, size = 1.5) +
+
+  scale_color_manual(values = c(
+    "Not significant" = "grey58",
+    "Significant" = "deeppink1"
+  )) +
+
+  theme_minimal() +
+
+  labs(
+    title = "Volcano plot glioma_NE vs control",
+    x = "Log2 Fold Change",
+    y = "-Log10 adjusted p-value"
+  )
+
 #prepariamo il dataframe
 res_df = as.data.frame(res_ne_ce)
 
@@ -780,17 +872,19 @@ ggplot(res_df,
   geom_point(alpha = 0.6, size = 1.5) +
 
   scale_color_manual(values = c(
-    "Not significant" = "grey70",
-    "Significant" = "red"
+    "Not significant" = "grey58",
+    "Significant" = "deeppink1"
   )) +
 
   theme_minimal() +
 
   labs(
-    title = "Volcano plot",
+    title = "Volcano plot glioma_NE vs glioma_CE",
     x = "Log2 Fold Change",
     y = "-Log10 adjusted p-value"
   )
+
+
 ```
 The volcano plot highlights numerous significantly differentially expressed genes between glioma_NE and glioma_CE samples. Significant genes are distributed on both sides of the plot, indicating the presence of genes specifically upregulated in each tumor region. Most genes display moderate fold changes around zero, reflecting the overall biological similarity between the two glioma subtypes. However, several genes exhibit strong expression differences and high statistical significance, suggesting the presence of region-specific transcriptional programs within the tumor microenvironment.
 
@@ -799,79 +893,96 @@ To further investigate the molecular differences between glioma_NE and glioma_CE
 This analysis allows the identification of genes that contribute most strongly to the transcriptional differences between the two tumor regions and may highlight biological processes associated with intratumoral heterogeneity.
 ```{r}
 #filtering DEGs 
-deg = res_ne_ce[res_ne_ce$padj < 0.05, ]
-nrow(deg)
+degs_ne_ce= res_ne_ce[res_ne_ce$padj < 0.05, ]
+cat("In glioma_ne against glioma_ce there are",nrow(degs_ne_ce),"DEGs \n")
+
+degs_ce= res_ce[res_ce$padj < 0.05, ]
+cat("In glioma_ce against control there are",nrow(degs_ce),"DEGs \n")
+
+degs_ne= res_ne[res_ne$padj < 0.05, ]
+cat("In glioma_ne against control there are",nrow(degs_ne),"DEGs")
 ```
 
 ```{r}
-#ordering the most significative
-res_ordered = res_ne_ce[order(res_ne_ce$padj), ]
-top_deg= head(res_ordered,20)
+# ORDERING THE MOST SIGNIFICATIVE ---------------------------------------------------------------------------
+
+for (v in c("_ce", "_ne", "_ne_ce")) {  
+  nome_degs = paste0("degs",v)
+  nome_ordered = paste0("res_ordered",v)
+  nome_top = paste0("top_deg",v)
+  
+  assign(nome_ordered, get(nome_degs)[order(get(nome_degs)$padj), ])
+  assign(nome_top, head(get(nome_ordered),20))
+  
+  # ID CONVERSION -------------------------------------------------------
+  
+  temp_df <- get(nome_top)
+  temp_df$Gene_clean = gsub("\\..*", "", rownames(temp_df))
+  
+  
+  #riusiamo mart x conversione
+  gene_symbols <- getBM(
+    attributes = c(
+      "ensembl_gene_id",
+      "external_gene_name"
+    ),
+    filters = "ensembl_gene_id",
+    values = temp_df$Gene_clean,
+    mart = mart
+    )
+    
+  temp_df <- data.frame(Ensembl_ID = rownames(temp_df),temp_df)
+    
+    temp_df <- temp_df |>
+    left_join(
+      gene_symbols,
+      by = c("Gene_clean" = "ensembl_gene_id")
+    )
+    
+  #clean teable
+    
+  temp_df = temp_df[, c(
+      "external_gene_name",
+      "log2FoldChange",
+      "Ensembl_ID"
+    )]
+    
+  colnames(temp_df) = c(
+      "Gene",
+      "Log2FoldChange"
+    )
+    
+  assign(nome_top, temp_df)
+  
+  
+  }
+ 
+knitr::kable(caption = "TOP 20 DEGs between glioma_ce vs control",top_deg_ce[,1:2])
+knitr::kable(caption = "TOP 20 DEGs between glioma_ne vs control",top_deg_ne[,1:2])
+knitr::kable(caption = "TOP 20 DEGs between glioma_ne vs glioma_ce",top_deg_ne_ce[,1:2])
+
+
 ```
+
 The top-ranked differentially expressed genes between glioma_NE and glioma_CE samples show extremely low adjusted p-values and large fold changes, indicating strong and statistically robust transcriptional differences between the two tumor regions. Several genes exhibit markedly increased expression in one condition relative to the other, suggesting the presence of region-specific molecular programs that may reflect differences in tumor microenvironment, cellular composition, or biological activity.
 
+SCRIVERE NEL COMMENTO CHE I P-VALUE SONO TUTTI 0 ALCUNI FINO A 10^-192
 
-## ID conversion
-
-```{r}
-top_deg$Gene_clean = gsub(
-  "\\..*",
-  "",
-  rownames(top_deg)
-)
-
-#riusiamo mart #coversione
-gene_symbols <- getBM(
-  attributes = c(
-    "ensembl_gene_id",
-    "external_gene_name"
-  ),
-  filters = "ensembl_gene_id",
-  values = top_deg$Gene_clean,
-  mart = mart
-)
-
-#merge
-top_deg_df = data.frame(
-  Ensembl_ID = rownames(top_deg),
-  top_deg
-)
-
-top_deg_df =
-  top_deg_df |>
-  left_join(
-    gene_symbols,
-    by = c(
-      "Gene_clean" = "ensembl_gene_id"
-    )
-  )
-```
-
-```{r}
-#clean teable
-top_deg_final = top_deg_df[, c(
-  "external_gene_name",
-  "log2FoldChange",
-  "padj"
-)]
-
-colnames(top_deg_final) = c(
-  "Gene",
-  "Log2FoldChange",
-  "Adjusted_pvalue"
-)
-
-top_deg_final
-```
 
 ## HEATMAP
 
 prendiamo i 50 geni più significativi
 ```{r}
-top_genes =  rownames(head(res_ordered, 50))
+all_top <- bind_rows(
+  top_deg_ce,
+  top_deg_ne,
+  top_deg_ne_ce
+)
+
+top_genes = distinct(all_top, ...3, .keep_all = TRUE)
 
 #estraiamo i dati normalizzati
-mat = assay(vsd)[top_genes, ]
+mat = assay(vsd)[top_genes$...3, ]
 
 #annotiamo i campioni
 annotation_col = data.frame(
@@ -879,6 +990,9 @@ annotation_col = data.frame(
 )
 
 rownames(annotation_col) = colnames(mat)
+rownames(mat) <- top_genes$Gene
+
+my_colors = list(Condition = Class_pal3way)
 
 #heatmap
 pheatmap(
@@ -887,9 +1001,12 @@ pheatmap(
   annotation_col = annotation_col,
   show_rownames = TRUE,
   clustering_method = "complete",
-  color = continuous_pal2,
-  main = "Top 50 differentially expressed genes"
+  color = continuous_pal3,
+  main = "Top differentially expressed genes",
+  annotation_colors = my_colors,
+  show_colnames = FALSE
 )
+
 ```
 
 # Gene set analysis
