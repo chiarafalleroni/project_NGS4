@@ -90,7 +90,7 @@ The main objectives of this analysis are:
 
 ### Physical collection of samples and replicates
 
-The researchers analyzed 69 adult patients who were presenting for open surgical resection of a glioma. They also collected 17 samples of healthy (non neoplastic) brain tissue from 11 patients undergoing surgery for other reasons (such as hydrocephalus or epilepsy) to use as a baseline for comparison. 
+The researchers analyzed 69 adult patients who were presenting for open surgical resection of a glioma. They also collected 17 samples of healthy (non neoplastic) brain tissue from 11 patients undergoing surgery for other reasons (such as hydrocephalus or epilepsy) to use as a baseline for comparison. Having so little patients against so many samples obviously raises statistical independence problems.
 
 Before beginning to remove the main bulk of the tumor (surgical debulking), the neurosurgeons took small fragments of tissue (measuring approximately 1.0 x 0.5 x 0.5 cm). To know exactly where they were taking the samples from, they used an intraoperative neuro-navigation system (Brainlab) based on MRI scans. They specifically targeted two areas: the "core" of the tumor (the contrast-enhancing area, called "CE") and the infiltrative margins of the tumor (the non-enhancing area, visible on FLAIR sequences, called "NE").
 
@@ -771,7 +771,7 @@ Differential expression analysis was performed using the DESeq2 statistical fram
 Since the dataset includes three groups (`control`, `glioma_CE`, and `glioma_NE`), three pairwise comparisons were carried out:
 
 - glioma_CE vs control 
-- glioma_NE vs control  
+- glioma_NE vs control 
 - glioma_NE vs glioma_CE  
 
 These contrasts allow the identification of both general tumor-associated transcriptional alterations and more specific molecular differences between contrast-enhancing and non-enhancing glioma regions, providing insight into intratumoral heterogeneity.
@@ -803,7 +803,7 @@ res_ce = na.omit(res_ce)
 res_ne_ce = na.omit(res_ne_ce)
 ```
 
-## MA PLOT
+## MA plot
 
 MA plots were generated to visualize the relationship between the mean of normalized counts and the log2 fold change across the different comparisons.  
 In these plots, each point represents a gene, the x-axis corresponds to the **average normalized expression level** across samples, while the y-axis represents the **log2 fold change** between the two conditions.  
@@ -833,8 +833,8 @@ plotMA(
   main = "MA plot: glioma_NE vs control"
 )
 ```
-Here the MA plot compare glioma_NE and control samples and also reveals widespread transcriptional differences between tumor and non-tumor tissues. A large number of genes show significant positive or negative log2 fold changes across different expression levels, indicating extensive deregulation associated with the glioma condition.
-
+Here the MA plot compare glioma_NE and control samples and also reveals widespread transcriptional differences between tumor and non-tumor tissues. A large number of genes show significant positive or negative log2 fold changes across different expression levels, indicating extensive deregulation associated with the glioma condition.  
+The broad dispersion of points, especially among low- and medium-expression genes, may also reflect tissue sampling heterogeneity and possible contamination from surrounding non-tumoral brain tissue or infiltrating cell populations. Since margin glioma samples are often composed of mixed cellular environments, part of the observed variability could derive from differences in cellular composition rather than purely tumor-specific transcriptional alterations.  
 Compared with the glioma_CE vs control comparison, the overall distribution appears slightly more compact, suggesting a somewhat lower degree of transcriptional divergence from control samples. Nevertheless, several genes still exhibit strong fold changes, highlighting relevant molecular alterations in the non-enhancing glioma region.
 
 ```{r}
@@ -846,11 +846,11 @@ plotMA(
   main = "MA plot: glioma_NE vs glioma_CE"
 )
 ```
-This last MA plot compare glioma_NE and glioma_CE samples. It shows that most genes are distributed around a log2 fold change close to zero, indicating broadly similar expression levels between the two tumor regions. Nevertheless, a subset of genes displays substantial positive or negative fold changes, suggesting the presence of region-specific transcriptional differences between contrast-enhancing and non-enhancing glioma areas.
-
+This last MA plot compare glioma_NE and glioma_CE samples. It shows that most genes are distributed around a log2 fold change close to zero, indicating broadly similar expression levels between the two tumor regions. Nevertheless, a subset of genes displays substantial positive or negative fold changes, suggesting the presence of region-specific transcriptional differences between contrast-enhancing and non-enhancing glioma areas.  
+Part of these differences may also be influenced by tissue sampling heterogeneity and contamination from non-tumoral cell populations. In particular, non-enhancing regions are often characterized by infiltrating tumor cells intermixed with normal brain tissue, immune cells, and stromal components, which can contribute to the observed transcriptional variability.  
 Compared with the tumor-versus-control comparisons, the overall distribution appears more compact, reflecting the greater biological similarity between the two glioma subtypes despite the presence of distinct molecular alterations.
 
-## VOLCANO PLOT
+## VOLCANO plot
 
 Volcano plots were generated to simultaneously visualize the magnitude of gene expression changes and their statistical significance across the different comparisons.  
 In these plots, each point represents a gene, the x-axis corresponds to the **log2 fold change** between the two conditions, while the y-axis represents the **negative logarithm of the adjusted p-value** (`-log10(padj)`).
@@ -891,7 +891,7 @@ ggplot(res_df,
   )
 ```
 The volcano plot comparing glioma_CE and control samples highlights a large number of significantly differentially expressed genes between tumor and non-tumor tissues.  
-Significant genes are distributed on both sides of the plot, indicating both upregulated and downregulated genes in glioma_CE samples relative to controls. Several genes also show very high fold changes and strong statistical significance, reflecting substantial transcriptional alterations associated with the tumor condition.
+Significant genes are distributed on both sides of the plot, indicating both upregulated and downregulated genes in glioma_CE samples relative to controls. Several genes also show very high fold changes and strong statistical significance, reflecting substantial transcriptional alterations associated with the tumor condition.  
 
 ```{r}
 #prepariamo il dataframe
@@ -927,7 +927,8 @@ ggplot(res_df,
   )
 ```
 This second volcano plot compare glioma_NE and control samples, it also shows extensive differential expression patterns, with numerous significantly deregulated genes across the two conditions.  
-Compared with the glioma_CE comparison, the distribution appears slightly less extreme, although several genes still exhibit high fold changes and strong statistical significance, supporting the presence of marked molecular alterations in the non-enhancing glioma region.
+Compared with the glioma_CE comparison, the distribution appears slightly less extreme, although several genes still exhibit high fold changes and strong statistical significance, supporting the presence of marked molecular alterations in the non-enhancing glioma region.  
+The less pronounced separation between conditions may partially reflect tissue sampling heterogeneity and contamination from surrounding non-tumoral brain tissue. Since non-enhancing glioma regions often contain infiltrating tumor cells intermixed with normal cellular components, part of the observed transcriptional profile could derive from differences in cellular composition.
 
 ```{r}
 #prepariamo il dataframe
@@ -964,7 +965,8 @@ ggplot(res_df,
 ```
 The volcano plot highlights numerous significantly differentially expressed genes between glioma_NE and glioma_CE samples.  
 Significant genes are distributed on both sides of the plot, indicating the presence of genes specifically upregulated in each tumor region. Most genes display moderate fold changes around zero, reflecting the overall biological similarity between the two glioma subtypes.  
-Nevertheless, several genes show strong expression differences and high statistical significance, supporting the presence of region-specific transcriptional programs within the tumor microenvironment.
+Nevertheless, several genes show strong expression differences and high statistical significance, supporting the presence of region-specific transcriptional programs within the tumor microenvironment.  
+Part of the observed variability may also derive from tissue sampling heterogeneity and contamination from non-tumoral cellular components. In particular, non-enhancing regions often contain infiltrating tumor cells intermixed with normal brain tissue, immune cells, and stromal populations, which can influence the transcriptional profile and contribute to the moderate separation observed between the two regions.
 
 ## Top genes
 
@@ -1021,6 +1023,11 @@ for (v in c("_ce", "_ne", "_ne_ce")) {
       by = c("Gene_clean" = "ensembl_gene_id")
     )
     
+    temp_df$external_gene_name[
+  is.na(temp_df$external_gene_name) |
+  temp_df$external_gene_name == ""
+] <- "nameless_gene"
+    
   #clean teable
     
   temp_df = temp_df[, c(
@@ -1040,15 +1047,29 @@ for (v in c("_ce", "_ne", "_ne_ce")) {
   }
  
 knitr::kable(caption = "TOP 20 DEGs between glioma_ce vs control",top_deg_ce[,1:2])
-knitr::kable(caption = "TOP 20 DEGs between glioma_ne vs control",top_deg_ne[,1:2])
-knitr::kable(caption = "TOP 20 DEGs between glioma_ne vs glioma_ce",top_deg_ne_ce[,1:2])
-
-
 ```
-The top-ranked differentially expressed genes identified across the different comparisons show large log2 fold changes together with strong statistical significance, indicating substantial differences in gene expression between the analyzed conditions.  
-The presence of both moderate and extremely high fold changes suggests that some genes undergo particularly pronounced transcriptional alterations, potentially reflecting distinct molecular mechanisms associated with tumor development and regional heterogeneity.  
-Adjusted p-values were omitted from the final tables for visualization purposes, as several genes displayed extremely low values (in some cases reaching magnitudes close to \(10^{-192}\)), making the tables less readable while providing limited additional interpretative value.
+The top differentially expressed genes identified in the glioma_CE versus control comparison reveal strong transcriptional alterations associated with the tumor condition.  
+Several highly upregulated genes belong to the *HOXC* family, including *HOXC9*, *HOXC11*, and *HOXC13*, which are known developmental transcription factors frequently associated with oncogenic processes, cellular proliferation, and tumor progression.
 
+In addition, genes such as *PITX2* and multiple long non-coding RNAs (HOXC-AS2, IL21-AS1, and LINC family members) suggest the activation of regulatory pathways involved in epigenetic modulation and transcriptional reprogramming. The very high log2 fold change values observed for these genes indicate substantial molecular divergence between contrast-enhancing glioma tissue and normal control samples, supporting the presence of a strongly altered tumor-associated transcriptional profile.  
+
+```{r}
+knitr::kable(caption = "TOP 20 DEGs between glioma_ne vs control",top_deg_ne[,1:2])
+```
+The top differentially expressed genes identified in the glioma_NE versus control comparison also reveal marked transcriptional alterations associated with the tumor condition.  
+Several strongly upregulated genes belong to the *HOXC* family, including *HOXC9*, *HOXC11*, and *HOXC13*, together with regulatory non-coding transcripts such as *HOXC-AS2* and *IL21-AS1*. These genes are commonly associated with developmental programs, transcriptional regulation, and oncogenic processes.  
+The presence of genes such as *PITX2* and multiple long non-coding RNAs further supports the activation of tumor-related regulatory pathways in the non-enhancing glioma region.  
+Although the overall expression profile appears broadly similar to that observed in the contrast-enhancing region, the slightly lower fold changes may reflect the greater cellular heterogeneity of glioma_NE samples, which often contain infiltrating tumor cells intermixed with non-tumoral brain tissue.
+
+Overall, these findings indicate that the non-enhancing region still retains a strongly altered molecular profile compared with normal control tissue, despite the presence of potential tissue composition differences.
+
+```{r}
+knitr::kable(caption = "TOP 20 DEGs between glioma_ne vs glioma_ce",top_deg_ne_ce[,1:2])
+```
+The top differentially expressed genes between glioma_NE and glioma_CE reveal important regional transcriptional differences within the tumor microenvironment. Several highly expressed genes, including *SYP*, *CAMK2A*, *NRGN*, *PRKCG*, *SLC6A7*, and *TBR1*, are strongly associated with neuronal signaling, synaptic activity, and neurodevelopmental functions.  
+The enrichment of neuronal-related genes in glioma_NE samples may reflect the infiltrative nature of non-enhancing glioma regions, which are often characterized by tumor cells intermixed with surrounding normal brain tissue. This finding suggests that part of the observed transcriptional profile could derive from tissue composition heterogeneity and contamination from non-tumoral neural cell populations.  
+In addition, genes such as *ARHGAP44* and *RAPGEF4*, involved in intracellular signaling and cytoskeletal regulation, may indicate molecular mechanisms associated with tumor cell plasticity and regional adaptation.  
+Overall, these results support the presence of biologically distinct transcriptional programs between contrast-enhancing and non-enhancing glioma regions.
 
 ## HEATMAP
 
@@ -1091,9 +1112,9 @@ pheatmap(
 )
 ```
 The heatmap highlights distinct expression patterns across the three analyzed conditions, with samples showing a tendency to cluster according to their biological group.  
-In particular, control samples appear clearly separated from glioma samples, reflecting the strong transcriptional differences between tumor and non-tumor tissues.
-
-Glioma_CE and glioma_NE samples show partially overlapping but still distinguishable expression profiles, supporting the presence of both shared tumor-related signatures and region-specific molecular alterations. The observed clustering patterns confirm that the selected top DEGs capture biologically relevant transcriptional variability across the dataset.
+In particular, control samples appear clearly separated from glioma samples, reflecting the strong transcriptional differences between tumor and non-tumor tissues.  
+Glioma_CE and glioma_NE samples show partially overlapping but still distinguishable expression profiles, supporting the presence of both shared tumor-related signatures and region-specific molecular alterations. The partial overlap between the two glioma regions may also reflect tissue heterogeneity and contamination from non-tumoral cellular components, especially in non-enhancing samples where infiltrating tumor cells are often intermixed with surrounding brain tissue.  
+Overall, the observed clustering patterns confirm that the selected top DEGs capture biologically relevant transcriptional variability across the dataset.
 
 # Gene set analysis
 
