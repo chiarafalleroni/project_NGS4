@@ -140,8 +140,12 @@ Let's give a look at the data's structure.
 
 ```{r}
 #str(SRP)
-dim(SRP)
-assays(SRP)
+
+cat("The dataset contains", nrow(SRP), "genes across", ncol(SRP), "samples.")
+```
+
+```{r}
+cat("The object contains the assay:", names(assays(SRP)))
 ```
 
 ## Data subsetting
@@ -187,19 +191,60 @@ colData(SRP)$class_2way = factor(colData(SRP)$class_2way,
 As a team, we decide to exclude genes with expression levels at 0 or extremely low levels in all samples here, before the EDA, and not in the quality control paragraph. We do this because we believe this row filtering is not a quality control but a basic definition of the rows we consider "data". We also decide to use the FilterByExpr (from edgeR) function, a much more statistically reliable tool.
 
 ```{r}
-table(rowSums(assay(SRP, "raw_counts")) == 0)
-table(rowSums(assay(SRP, "raw_counts")) < 15)
+# genes with all zero counts
+cat(
+  "Genes with all zero counts:",
+  sum(rowSums(assay(SRP, "raw_counts")) == 0),
+  "\n"
+)
 
-table(is.na(assay(SRP, "raw_counts"))) #good!
-table(duplicated(rownames(SRP))) #good!
+# lowly expressed genes
+cat(
+  "Genes with total counts lower than 15:",
+  sum(rowSums(assay(SRP, "raw_counts")) < 15),
+  "\n"
+)
 
-dim(SRP)
-keep = filterByExpr(assay(SRP, "raw_counts"), group = SRP$class_3way)
+# missing values
+cat(
+  "Missing values in the count matrix:",
+  sum(is.na(assay(SRP, "raw_counts"))),
+  "\n"
+)
+
+# duplicated genes
+cat(
+  "Duplicated gene identifiers:",
+  sum(duplicated(rownames(SRP))),
+  "\n"
+)
+
+# dimensions before filtering
+cat(
+  "Dataset dimensions before filtering:",
+  nrow(SRP),
+  "genes and",
+  ncol(SRP),
+  "samples.\n"
+)
+
+# filtering
+keep = filterByExpr(
+  assay(SRP, "raw_counts"),
+  group = SRP$class_3way
+)
+
 SRP = SRP[keep, ]
-dim(SRP)
 
+# dimensions after filtering
+cat(
+  "Dataset dimensions after filtering:",
+  nrow(SRP),
+  "genes and",
+  ncol(SRP),
+  "samples."
+)
 ```
-
 
 # Pre-normalization EDA 
 
@@ -695,8 +740,6 @@ fviz_pca_ind(
 )
 ```
 
-INTERPRETARE GENI E FARE IPOTESI DEL CATSO
-
 ## Sample-to-sample correlation heatmap
 
 ```{r}
@@ -722,33 +765,38 @@ Heatmap(cor_matrix,
 ```
 The sample correlation heatmap, based on Pearson correlation of VST-normalized counts, reveals high transcriptomic similarity across the cohort (person correlation $>0.75$), confirming the absence of technical outliers. Hierarchical clustering effectively identifies distinct blocks of correlation, primarily separating control brain tissues from tumor core (CE) samples. However, the partial intermixing of non-enhancing (NE) margin samples reflects the infiltrative nature of the disease, where the transcriptomic profile is a heterogeneous mixture of neoplastic and normal glial components. Overall, the clear clustering patterns validate the effectiveness of the DESeq2 normalization in preserving biologically relevant variation.
 
-# Identification of DEGs
+# Identification of of differentially expressed genes (DEGs)
 
-grazie al modello che abbiamo usato è molto semplice identificare i DEGs, lo facciamo 3 tutti e tre i casi: glioma_ne - control, glioma_ce - control e glioma_ne - glioma_ce
+Differential expression analysis was performed using the DESeq2 statistical framework to identify genes showing significant expression changes between the different biological conditions.  
+Since the dataset includes three groups (`control`, `glioma_CE`, and `glioma_NE`), three pairwise comparisons were carried out:
+
+- glioma_CE vs control 
+- glioma_NE vs control  
+- glioma_NE vs glioma_CE  
+
+These contrasts allow the identification of both general tumor-associated transcriptional alterations and more specific molecular differences between contrast-enhancing and non-enhancing glioma regions, providing insight into intratumoral heterogeneity.
+
+The `results()` function was used to extract differential expression statistics from the fitted DESeq2 model for each comparison, including log2 fold changes, Wald test p-values, and adjusted p-values corrected for multiple testing.
 
 ```{r}
 #resultsNames(dds)
 
-#glioma_ne - control
-res_ne = results(dds, contrast = c("class_3way", "glioma_NE", "control"))
-
-print(res_ne)
+#glioma_ce - control
+res_ce = results(dds, contrast = c("class_3way", "glioma_CE", "control"))
 ```
 
 ```{r}
-#glioma_ce - control
-res_ce = results(dds, contrast = c("class_3way", "glioma_CE", "control"))
-print(res_ce)
+#glioma_ne - control
+res_ne = results(dds, contrast = c("class_3way", "glioma_NE", "control"))
 ```
 
 ```{r}
 res_ne_ce = results(dds, contrast = c("class_3way", "glioma_NE", "glioma_CE"))
-print(res_ne_ce)
 ```
 
-rimuoviamo i NA, regola imp dell'output sopra, principalmente dobbiamo guardare log2foldchange e padj
--log2... ci dice quanto cambia il gene tra glioma ne e control
-- padj è il pvalue corretto x multiple testing, perciò un gene è deg se padj < 0.05
+Missing values were removed from the DEG result tables using `na.omit()`.  
+These NA values are typically associated with genes showing extremely low expression levels or insufficient information for reliable statistical estimation. Removing them simplifies downstream analyses and visualization steps by retaining only genes with valid differential expression statistics.
+
 ```{r}
 res_ne = na.omit(res_ne)
 res_ce = na.omit(res_ce)
@@ -756,7 +804,11 @@ res_ne_ce = na.omit(res_ne_ce)
 ```
 
 ## MA PLOT
-i punti vicino a zero non sono differenziali, quelli lontani da zero sono molto differenziali
+
+MA plots were generated to visualize the relationship between the mean of normalized counts and the log2 fold change across the different comparisons.  
+In these plots, each point represents a gene, the x-axis corresponds to the **average normalized expression level** across samples, while the y-axis represents the **log2 fold change** between the two conditions.  
+MA plots provide an overview of the global differential expression patterns, allowing the identification of genes showing substantial expression changes as well as the overall distribution of transcriptional differences between groups.
+
 ```{r}
 plotMA(
   res_ce,
@@ -765,7 +817,14 @@ plotMA(
   colNonSig = "grey58",
   main = "MA plot: glioma_CE vs control"
 )
+```
+This first MA plot that compare glioma_CE and control samples shows a broad distribution of genes with both positive and negative log2 fold changes, indicating substantial transcriptional differences between tumor and non-tumor tissues.  
 
+A large number of significantly differentially expressed genes are observed across a wide range of normalized expression values. Most genes remain centered around zero, reflecting genes with similar expression levels between the two conditions, while several genes display strong positive or negative fold changes, suggesting marked upregulation or downregulation in glioma_CE samples relative to controls.
+
+The presence of genes with very large fold changes highlights profound molecular alterations associated with the tumor state.
+
+```{r}
 plotMA(
   res_ne,
   ylim = c(-8, 8),
@@ -773,7 +832,12 @@ plotMA(
   colNonSig = "grey58",
   main = "MA plot: glioma_NE vs control"
 )
+```
+Here the MA plot compare glioma_NE and control samples and also reveals widespread transcriptional differences between tumor and non-tumor tissues. A large number of genes show significant positive or negative log2 fold changes across different expression levels, indicating extensive deregulation associated with the glioma condition.
 
+Compared with the glioma_CE vs control comparison, the overall distribution appears slightly more compact, suggesting a somewhat lower degree of transcriptional divergence from control samples. Nevertheless, several genes still exhibit strong fold changes, highlighting relevant molecular alterations in the non-enhancing glioma region.
+
+```{r}
 plotMA(
   res_ne_ce,
   ylim = c(-8, 8),
@@ -781,13 +845,19 @@ plotMA(
   colNonSig = "grey58",
   main = "MA plot: glioma_NE vs glioma_CE"
 )
-
 ```
-The MA plot comparing glioma_NE and glioma_CE samples shows that the majority of genes are distributed around a log2 fold change close to zero, indicating similar expression levels between the two tumor regions. Nevertheless, a subset of genes displays substantial positive or negative fold changes, suggesting the presence of transcriptional differences between contrast-enhancing and non-enhancing glioma areas. The relatively compact distribution compared to tumor-versus-control comparisons reflects the higher biological similarity between the two glioma subtypes.
+This last MA plot compare glioma_NE and glioma_CE samples. It shows that most genes are distributed around a log2 fold change close to zero, indicating broadly similar expression levels between the two tumor regions. Nevertheless, a subset of genes displays substantial positive or negative fold changes, suggesting the presence of region-specific transcriptional differences between contrast-enhancing and non-enhancing glioma areas.
+
+Compared with the tumor-versus-control comparisons, the overall distribution appears more compact, reflecting the greater biological similarity between the two glioma subtypes despite the presence of distinct molecular alterations.
 
 ## VOLCANO PLOT
-```{r}
 
+Volcano plots were generated to simultaneously visualize the magnitude of gene expression changes and their statistical significance across the different comparisons.  
+In these plots, each point represents a gene, the x-axis corresponds to the **log2 fold change** between the two conditions, while the y-axis represents the **negative logarithm of the adjusted p-value** (`-log10(padj)`).
+
+This type of visualization allows the rapid identification of genes showing both large expression changes and high statistical significance. Genes located farther from zero on the x-axis and higher on the y-axis represent the most strongly differentially expressed genes between the compared conditions.
+
+```{r}
 #prepariamo il dataframe
 res_df = as.data.frame(res_ce)
 
@@ -819,7 +889,11 @@ ggplot(res_df,
     x = "Log2 Fold Change",
     y = "-Log10 adjusted p-value"
   )
+```
+The volcano plot comparing glioma_CE and control samples highlights a large number of significantly differentially expressed genes between tumor and non-tumor tissues.  
+Significant genes are distributed on both sides of the plot, indicating both upregulated and downregulated genes in glioma_CE samples relative to controls. Several genes also show very high fold changes and strong statistical significance, reflecting substantial transcriptional alterations associated with the tumor condition.
 
+```{r}
 #prepariamo il dataframe
 res_df = as.data.frame(res_ne)
 
@@ -851,7 +925,11 @@ ggplot(res_df,
     x = "Log2 Fold Change",
     y = "-Log10 adjusted p-value"
   )
+```
+This second volcano plot compare glioma_NE and control samples, it also shows extensive differential expression patterns, with numerous significantly deregulated genes across the two conditions.  
+Compared with the glioma_CE comparison, the distribution appears slightly less extreme, although several genes still exhibit high fold changes and strong statistical significance, supporting the presence of marked molecular alterations in the non-enhancing glioma region.
 
+```{r}
 #prepariamo il dataframe
 res_df = as.data.frame(res_ne_ce)
 
@@ -883,28 +961,33 @@ ggplot(res_df,
     x = "Log2 Fold Change",
     y = "-Log10 adjusted p-value"
   )
-
-
 ```
-The volcano plot highlights numerous significantly differentially expressed genes between glioma_NE and glioma_CE samples. Significant genes are distributed on both sides of the plot, indicating the presence of genes specifically upregulated in each tumor region. Most genes display moderate fold changes around zero, reflecting the overall biological similarity between the two glioma subtypes. However, several genes exhibit strong expression differences and high statistical significance, suggesting the presence of region-specific transcriptional programs within the tumor microenvironment.
+The volcano plot highlights numerous significantly differentially expressed genes between glioma_NE and glioma_CE samples.  
+Significant genes are distributed on both sides of the plot, indicating the presence of genes specifically upregulated in each tumor region. Most genes display moderate fold changes around zero, reflecting the overall biological similarity between the two glioma subtypes.  
+Nevertheless, several genes show strong expression differences and high statistical significance, supporting the presence of region-specific transcriptional programs within the tumor microenvironment.
 
 ## Top genes
-To further investigate the molecular differences between glioma_NE and glioma_CE samples, the most significant differentially expressed genes were identified and ranked according to adjusted p-value and fold-change magnitude.  
-This analysis allows the identification of genes that contribute most strongly to the transcriptional differences between the two tumor regions and may highlight biological processes associated with intratumoral heterogeneity.
+
+Differentially expressed genes (DEGs) were filtered by selecting genes with an adjusted p-value (`padj`) lower than **0.05**.  
+The number of significant DEGs was then evaluated for each comparison in order to quantify the extent of transcriptional differences between the analyzed conditions.
+
+For each comparison, significant genes were ranked according to adjusted p-value, and the top 20 most significant DEGs were selected for further inspection.  
+Since gene identifiers were initially reported as Ensembl IDs, an additional annotation step was performed to convert them into gene symbols, allowing a clearer biological interpretation of the results.
+
 ```{r}
 #filtering DEGs 
-degs_ne_ce= res_ne_ce[res_ne_ce$padj < 0.05, ]
-cat("In glioma_ne against glioma_ce there are",nrow(degs_ne_ce),"DEGs \n")
-
 degs_ce= res_ce[res_ce$padj < 0.05, ]
 cat("In glioma_ce against control there are",nrow(degs_ce),"DEGs \n")
 
 degs_ne= res_ne[res_ne$padj < 0.05, ]
-cat("In glioma_ne against control there are",nrow(degs_ne),"DEGs")
+cat("In glioma_ne against control there are",nrow(degs_ne),"DEGs\n")
+
+degs_ne_ce= res_ne_ce[res_ne_ce$padj < 0.05, ]
+cat("In glioma_ne against glioma_ce there are",nrow(degs_ne_ce),"DEGs")
 ```
 
 ```{r}
-# ORDERING THE MOST SIGNIFICATIVE ---------------------------------------------------------------------------
+# ordering the most significative
 
 for (v in c("_ce", "_ne", "_ne_ce")) {  
   nome_degs = paste0("degs",v)
@@ -914,8 +997,7 @@ for (v in c("_ce", "_ne", "_ne_ce")) {
   assign(nome_ordered, get(nome_degs)[order(get(nome_degs)$padj), ])
   assign(nome_top, head(get(nome_ordered),20))
   
-  # ID CONVERSION -------------------------------------------------------
-  
+  # ID conversion 
   temp_df <- get(nome_top)
   temp_df$Gene_clean = gsub("\\..*", "", rownames(temp_df))
   
@@ -963,15 +1045,16 @@ knitr::kable(caption = "TOP 20 DEGs between glioma_ne vs glioma_ce",top_deg_ne_c
 
 
 ```
-
-The top-ranked differentially expressed genes between glioma_NE and glioma_CE samples show extremely low adjusted p-values and large fold changes, indicating strong and statistically robust transcriptional differences between the two tumor regions. Several genes exhibit markedly increased expression in one condition relative to the other, suggesting the presence of region-specific molecular programs that may reflect differences in tumor microenvironment, cellular composition, or biological activity.
-
-SCRIVERE NEL COMMENTO CHE I P-VALUE SONO TUTTI 0 ALCUNI FINO A 10^-192
+The top-ranked differentially expressed genes identified across the different comparisons show large log2 fold changes together with strong statistical significance, indicating substantial differences in gene expression between the analyzed conditions.  
+The presence of both moderate and extremely high fold changes suggests that some genes undergo particularly pronounced transcriptional alterations, potentially reflecting distinct molecular mechanisms associated with tumor development and regional heterogeneity.  
+Adjusted p-values were omitted from the final tables for visualization purposes, as several genes displayed extremely low values (in some cases reaching magnitudes close to \(10^{-192}\)), making the tables less readable while providing limited additional interpretative value.
 
 
 ## HEATMAP
 
-prendiamo i 50 geni più significativi
+A heatmap was generated using the top differentially expressed genes identified across all pairwise comparisons in order to visualize global expression patterns and sample clustering among the analyzed conditions.  
+Expression values were extracted from the variance stabilized transformed (VST) dataset and scaled by row to facilitate the comparison of relative gene expression across samples.
+
 ```{r}
 all_top <- bind_rows(
   top_deg_ce,
@@ -1006,8 +1089,11 @@ pheatmap(
   annotation_colors = my_colors,
   show_colnames = FALSE
 )
-
 ```
+The heatmap highlights distinct expression patterns across the three analyzed conditions, with samples showing a tendency to cluster according to their biological group.  
+In particular, control samples appear clearly separated from glioma samples, reflecting the strong transcriptional differences between tumor and non-tumor tissues.
+
+Glioma_CE and glioma_NE samples show partially overlapping but still distinguishable expression profiles, supporting the presence of both shared tumor-related signatures and region-specific molecular alterations. The observed clustering patterns confirm that the selected top DEGs capture biologically relevant transcriptional variability across the dataset.
 
 # Gene set analysis
 

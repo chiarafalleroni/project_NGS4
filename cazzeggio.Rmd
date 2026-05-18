@@ -34,9 +34,14 @@ SRP044668 = SRP044668[rowS]
 
 
 ```{r}
+
+SRP = readRDS("SRP044668.rds")
+
+
 data = data[rowSum]
 readRDS("SRP044668.rds")
-colnames(colData("SRP"))
+colnames(colData(SRP))
+testa= head(as.data.frame(colData(SRP)))
 
 info = colData(SRP044668)$sra.sample_attributes
 head(info)
@@ -94,3 +99,34 @@ git push
 sto aggiungendo una cosa
 
 ahahah suca
+
+controllare numero sesso
+```{r}
+estimated_sex = ifelse(
+  colData(SRP)$`recount_qc.aligned_reads%.chry` > 0.1,
+  "male",
+  "female"
+)
+```
+
+```{r}
+#debug
+length(estimated_sex)
+ncol(SRP)
+length(colData(SRP)$class_2way)
+```
+
+```{r}
+sample_info = colData(SRP)$sra.sample_attributes
+
+colData(SRP)$class_2way =
+  case_when(
+    grepl("brain tissue", sample_info) ~ "control",
+    grepl("glioma", sample_info) ~ "glioma"
+  )
+
+colData(SRP)$class_2way =
+  factor(colData(SRP)$class_2way,
+         levels = c("control", "glioma"))
+```
+
