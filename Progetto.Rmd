@@ -594,6 +594,8 @@ Actually, the PC2 goes approximately alongside the PC3 only for control and glio
 
 ### Consulting the PCA runes: a forecast of DEGs
 
+In this paragraph we aim to get a first glance at our dataset transcriptomical variability using the PCs loadings
+
 ```{r}
 pc1_loadings = pca$rotation[,1]
 sorted_pc1_loadings = pc1_loadings[order(abs(pc1_loadings), decreasing = TRUE)]
@@ -622,6 +624,9 @@ pc1_var_drivers_df
 
 ```
 
+This 10 genes and their contribution to PC1 are sending us a clear hint: the most veriability in our dataset is encoded in the loss of neurobiological functions. The genes are all neurobiology related (**Receptors**: *GRIN1*, *GABRA1* ; **vescicular traffic**: *SLC17A7*, *SYT1*,... ; **Membrane and cytoskeleton**: *PACSIN1*, *NEFL* ; **Intracellular signaling**: *CAMK2A*, *VSNL1* ), and the less expressed they are, the more on the right of the graph (positive values) the samples are going to be, alongside the glioma_CE samples. **What we can state now then, is that tumor glioma cells tend with all probabilities to loose the expression of neuronal functions.**
+
+
 ```{r}
 pc2_loadings = pca$rotation[,2]
 sorted_pc2_loadings = pc2_loadings[order(abs(pc2_loadings), decreasing = TRUE)]
@@ -647,6 +652,8 @@ pc2_var_drivers_df = pc2_var_drivers_df[, c(4, 1, 3, 2)]
 pc2_var_drivers_df
 
 ```
+
+This new bundle of genes is now completely composed of oligodentrocytes' (and partially astrocites') associated genes. We believe it's separating samples with regard to their cellular composition (neurons vs glia cells proportion).
 
 ```{r}
 pc3_loadings = pca$rotation[,3]
@@ -674,18 +681,37 @@ pc3_var_drivers_df
 
 ```
 
+Lastly, we encounter a clearly sex-driven PC. Positive genes (*XIST*, *TSIX*,...) are female transcripts, while negatives (*DMRT2*,...) are males. In spite of this there are other genes with non sex-related functions such as Lactotransferrin or SOX10. We suppose this might be linked to dataset imbalance between sex and tumor rapresentation (e.g. all SOX10 upregulated tumors were coming from females) but that is not necessarily the case; the fact the sample population came from only 27 different patients makes this biases really easy to appear (please find the article's supplementary methods in the zip file sent, table S1).
 
-#### PCA PER CONTROLLO MASCHI-FEMMINE
+### Sex and the plot
 
-analisi preliminare
+Here we aim to confirm the sex separation PC3 might be doing what we supposed in the previous paragraph. Before starting, we had to set a M/F ground truth but this has not been easy since we didn't find a downloadable CSV (or any tabular file) of the patient's table (table S1), and this PDF table was moreover lacking any form of information to be aligned to our 94 brain samples. We therefore exploited the percentual amount of Y chromosome reads. 
 
 ```{r}
+df_qc <- data.frame(
+  chrY_reads = colData(SRP)$`recount_qc.aligned_reads%.chry`
+)
+
+ggplot(df_qc, aes(x = chrY_reads)) +
+  geom_histogram(bins = 50, fill = "steelblue", color = "black") +
+  geom_vline(xintercept = 0.035, color = "red", linetype = "dashed", size = 1) +
+  theme_minimal() +
+  labs(
+    title = "chrY reads distribution",
+    x = "Reads on chrY (%)",
+    y = "number of samples"
+  )
+
 estimated_sex = ifelse(
-  colData(SRP)$`recount_qc.aligned_reads%.chry` > 0.04,
+  colData(SRP)$`recount_qc.aligned_reads%.chry` > 0.035,
   "male",
   "female"
 )
 
+```
+
+```{r}
+summary(colData(SRP)$`recount_qc.aligned_reads%.chry`)
 ```
 
 
@@ -697,15 +723,7 @@ table(estimated_sex, colData(SRP)$class_2way)
 table(estimated_sex, colData(SRP)$class_3way)
 ```
 
-```{r}
-summary(colData(SRP)$`recount_qc.aligned_reads%.chry`)
-```
 
-```{r}
-
-```
-
-#per plotting
 
 ```{r}
 estimated_sex = factor(
@@ -725,8 +743,6 @@ fviz_pca_ind(
 )
 ```
 
-## rifacciamo con 1 e 2 per controllo
-
 ```{r}
 fviz_pca_ind(
   pca,
@@ -740,30 +756,9 @@ fviz_pca_ind(
 )
 ```
 
-## Sample-to-sample correlation heatmap
+It's clear how the third component captures an information about the samples estimated gender the second and first components are not predicting.
 
-```{r}
 
-cor_matrix = cor(assay(vsd), method = "pearson")
-
-annot_info = HeatmapAnnotation(
-  df = data.frame(Class = colData(vsd)$class_3way),
-  col = list(Class = Class_pal3way), 
-  show_legend = TRUE
-)
-
-Heatmap(cor_matrix,
-        name = "Pearson\nCorr",
-        top_annotation = annot_info,
-        col = continuous_pal2, 
-        cluster_rows = TRUE, 
-        cluster_columns = TRUE,
-        show_row_names = FALSE,
-        show_column_names = FALSE,
-        column_title = "Sample Correlation Matrix (VST Data)",
-        row_title = "Samples")
-```
-The sample correlation heatmap, based on Pearson correlation of VST-normalized counts, reveals high transcriptomic similarity across the cohort (person correlation $>0.75$), confirming the absence of technical outliers. Hierarchical clustering effectively identifies distinct blocks of correlation, primarily separating control brain tissues from tumor core (CE) samples. However, the partial intermixing of non-enhancing (NE) margin samples reflects the infiltrative nature of the disease, where the transcriptomic profile is a heterogeneous mixture of neoplastic and normal glial components. Overall, the clear clustering patterns validate the effectiveness of the DESeq2 normalization in preserving biologically relevant variation.
 
 # Identification of of differentially expressed genes (DEGs)
 
@@ -801,6 +796,11 @@ These NA values are typically associated with genes showing extremely low expres
 res_ne = na.omit(res_ne)
 res_ce = na.omit(res_ce)
 res_ne_ce = na.omit(res_ne_ce)
+
+print(dim(res_ce))
+print(dim(res_ne))
+print(dim(res_ne_ce))
+
 ```
 
 ## MA plot
@@ -1117,6 +1117,72 @@ Glioma_CE and glioma_NE samples show partially overlapping but still distinguish
 Overall, the observed clustering patterns confirm that the selected top DEGs capture biologically relevant transcriptional variability across the dataset.
 
 # Gene set analysis
+
+
+
+```{r}
+#dim(degs_ce)
+#dim(degs_ne)
+#dim(degs_ne_ce)
+```
+```{r}
+for (v in c("_ce", "_ne", "_ne_ce")) {
+  nome_res = paste0("res",v)
+  nome_degs = paste0("degs",v)
+  
+  nome_kk =paste0("kk",v)
+  
+  universe_genes <- row.names(get(nome_res))
+  deg_genes <- row.names(get(nome_degs))
+  
+  universe_genes <- gsub("\\..*", "", universe_genes)
+  deg_genes <- gsub("\\..*", "", deg_genes)
+  
+  
+  universo.entrez <- mapIds(org.Hs.eg.db, # genome wide annotation for Human that contains Entrez Gene identifiers
+                    keys = universe_genes, #Column containing Ensembl gene ids
+                    column = "ENTREZID",
+                    keytype = "ENSEMBL")  
+
+  sign.entrez <- mapIds(org.Hs.eg.db,
+                    keys = deg_genes, #Column containing Ensembl gene ids
+                    column = "ENTREZID",
+                    keytype = "ENSEMBL")
+  
+  universo.entrez <- as.character(universo.entrez)
+  sign.entrez <- as.character(sign.entrez)
+  
+  
+  assign(nome_kk, enrichKEGG(gene = sign.entrez,
+                 universe = universo.entrez,
+                 organism = 'hsa',
+                 keyType = 'ncbi-geneid',
+                 pvalueCutoff = 0.05,
+                 pAdjustMethod = "BH"))
+  
+  print(dim(get(nome_degs)))
+  print(dim(get(nome_res)))
+  
+}
+
+
+```
+
+```{r}
+kk_ce@result[1:10,]
+kk_ne@result[1:10,]
+kk_ne_ce@result[1:10,]
+```
+**QUESTE TABELLE SONO ORDINATE X GENI + IMPORTANTI O NO?**
+```{r}
+barplot(kk_ce)
+dotplot(kk_ne)
+
+nrow(as.data.frame(kk_ce))
+```
+
+**CI SONO TROPPI CAZZO DI DEGS, NON Puo ESSERE DEG IL 60% DEL TRASCRITTOMA UMANO....**
+
 
 # ALTRO è PUNTI BONUSSSS
 
