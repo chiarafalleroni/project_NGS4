@@ -797,10 +797,28 @@ res_ne = na.omit(res_ne)
 res_ce = na.omit(res_ce)
 res_ne_ce = na.omit(res_ne_ce)
 
+# filtering significant DEGs
+res_ne = res_ne[
+  res_ne$padj < 0.01 &
+  abs(res_ne$log2FoldChange) > 2,
+]
+
+res_ce = res_ce[
+  res_ce$padj < 0.01 &
+  abs(res_ce$log2FoldChange) > 2,
+]
+
+res_ne_ce = res_ne_ce[
+  res_ne_ce$padj < 0.01 &
+  abs(res_ne_ce$log2FoldChange) > 2,
+]
+```
+
+```{r}
+#controllo se le dimensioni sono cambiate
 print(dim(res_ce))
 print(dim(res_ne))
 print(dim(res_ne_ce))
-
 ```
 
 ## MA plot
