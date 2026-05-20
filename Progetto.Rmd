@@ -49,6 +49,12 @@ library(factoextra)
 library(ComplexHeatmap)
 library(biomaRt)
 library(pheatmap)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+library(clusterProfiler)
+library(patchwork)
+library(enrichplot)
+
 ```
 
 ```{r}
@@ -796,26 +802,9 @@ These NA values are typically associated with genes showing extremely low expres
 res_ne = na.omit(res_ne)
 res_ce = na.omit(res_ce)
 res_ne_ce = na.omit(res_ne_ce)
-
-# filtering significant DEGs
-res_ne = res_ne[
-  res_ne$padj < 0.01 &
-  abs(res_ne$log2FoldChange) > 2,
-]
-
-res_ce = res_ce[
-  res_ce$padj < 0.01 &
-  abs(res_ce$log2FoldChange) > 2,
-]
-
-res_ne_ce = res_ne_ce[
-  res_ne_ce$padj < 0.01 &
-  abs(res_ne_ce$log2FoldChange) > 2,
-]
 ```
 
 ```{r}
-#controllo se le dimensioni sono cambiate
 print(dim(res_ce))
 print(dim(res_ne))
 print(dim(res_ne_ce))
@@ -996,16 +985,16 @@ Since gene identifiers were initially reported as Ensembl IDs, an additional ann
 
 ```{r}
 #filtering DEGs 
-degs_ce= res_ce[res_ce$padj < 0.05, ]
+degs_ce= res_ce[res_ce$padj < 0.01 & abs(res_ce$log2FoldChange) > 2,]
 cat("In glioma_ce against control there are",nrow(degs_ce),"DEGs \n")
 
-degs_ne= res_ne[res_ne$padj < 0.05, ]
+degs_ne= res_ne[res_ne$padj < 0.01 & abs(res_ne$log2FoldChange) > 2, ]
 cat("In glioma_ne against control there are",nrow(degs_ne),"DEGs\n")
 
-degs_ne_ce= res_ne_ce[res_ne_ce$padj < 0.05, ]
+degs_ne_ce= res_ne_ce[res_ne_ce$padj < 0.01 & abs(res_ne_ce$log2FoldChange) > 2,]
 cat("In glioma_ne against glioma_ce there are",nrow(degs_ne_ce),"DEGs")
 ```
-
+Given the extremely high amount of DEGs (up to 60% of the trascriptome) found using a 0.05 p-value threshold we adjust it at 0.01 and set a log2Foldchange threshold at 2.
 ```{r}
 # ordering the most significative
 
@@ -1136,19 +1125,26 @@ Overall, the observed clustering patterns confirm that the selected top DEGs cap
 
 # Gene set analysis
 
-
+## ORA
 
 ```{r}
 #dim(degs_ce)
 #dim(degs_ne)
 #dim(degs_ne_ce)
 ```
+
 ```{r}
 for (v in c("_ce", "_ne", "_ne_ce")) {
   nome_res = paste0("res",v)
   nome_degs = paste0("degs",v)
   
-  nome_kk =paste0("kk",v)
+  nome_ora =paste0("ora",v)
+  nome_oraGO = paste0("oraGO",v)
+  
+  nome_signentrez = paste0("sign.entrez",v)
+  
+  nome_graf = paste0("graf",v)
+  nome_grafGO = paste0("grafGO",v)
   
   universe_genes <- row.names(get(nome_res))
   deg_genes <- row.names(get(nome_degs))
@@ -1162,45 +1158,196 @@ for (v in c("_ce", "_ne", "_ne_ce")) {
                     column = "ENTREZID",
                     keytype = "ENSEMBL")  
 
-  sign.entrez <- mapIds(org.Hs.eg.db,
+  assign(nome_signentrez, mapIds(org.Hs.eg.db,
                     keys = deg_genes, #Column containing Ensembl gene ids
                     column = "ENTREZID",
-                    keytype = "ENSEMBL")
+                    keytype = "ENSEMBL"))
   
   universo.entrez <- as.character(universo.entrez)
-  sign.entrez <- as.character(sign.entrez)
+  assign(nome_signentrez, as.character(get(nome_signentrez)))
   
   
-  assign(nome_kk, enrichKEGG(gene = sign.entrez,
+  assign(nome_ora, enrichKEGG(gene = sign.entrez,
                  universe = universo.entrez,
                  organism = 'hsa',
                  keyType = 'ncbi-geneid',
                  pvalueCutoff = 0.05,
                  pAdjustMethod = "BH"))
   
+  assign(nome_oraGO, enrichGO(gene = sign.entrez,
+              universe = universo.entrez,
+              OrgDb = 'org.Hs.eg.db',
+              keyType = "ENTREZID",
+              ont = "BP",
+              pvalueCutoff = 0.05,
+              pAdjustMethod = "BH",
+              readable = TRUE))
+
+  
   print(dim(get(nome_degs)))
   print(dim(get(nome_res)))
   
+  assign(nome_graf, upsetplot(get(nome_ora),5)) +
+    ggtitle(paste0("KEGG database, ",v)) + 
+    ylim(0, 20)
+  assign(nome_grafGO, upsetplot(get(nome_oraGO),5)) +
+    ggtitle(paste0("GO database, ",v)) +
+    ylim(0, 20)
+  
 }
 
+dim(ora_ce)
+dim(ora_ne)
+dim(ora_ne_ce)
+
+dim(oraGO_ce)
+dim(oraGO_ne)
+dim(oraGO_ne_ce)
+
 
 ```
 
 ```{r}
-kk_ce@result[1:10,]
-kk_ne@result[1:10,]
-kk_ne_ce@result[1:10,]
+ora_ce@result[1:10,]
+ora_ne@result[1:10,]
+ora_ne_ce@result[1:10,]
+
+oraGO_ce@result[1:10,]
+oraGO_ne@result[1:10,]
+oraGO_ne_ce@result[1:10,]
 ```
-**QUESTE TABELLE SONO ORDINATE X GENI + IMPORTANTI O NO?**
+Ordinate per significativita non per magnitudo!!!
+
+```{r fig.height=10, fig.width=8}
+library(clusterProfiler)
+
+# 1. Crea una lista "nominata" con i tre vettori di geni significativi (quelli che usavi per l'ORA)
+lista_geni_ora <- list(
+  "CE_vs_Sano" = sign.entrez_ce,
+  "NE_vs_Sano" = sign.entrez_ne,
+  "CE_vs_NE"   = sign.entrez_ne_ce
+)
+
+# 2. Usa compareCluster invece di enrichKEGG
+confronto_kegg <- compareCluster(geneCluster = lista_geni_ora, 
+                                 fun = "enrichKEGG", 
+                                 organism = "hsa")
+
+# 3. Plotta il risultato combinato
+dotplot(confronto_kegg, showCategory = 10) + 
+  ggtitle("Confronto Pathway KEGG tra le regioni del Glioma")
+
+# Usiamo compareCluster dicendogli di applicare "enrichGO"
+confronto_go <- compareCluster(geneCluster = lista_geni_ora, 
+                               fun = "enrichGO", 
+                               OrgDb = org.Hs.eg.db, # Specifico per GO
+                               ont = "BP",           # Scegliamo i Biological Process
+                               pvalueCutoff = 0.05)
+# plottiamo
+
+dotplot(confronto_kegg, showCategory = 10) + 
+  ggtitle("Confronto Pathway KEGG tra le regioni del Glioma")
+
+
+
+```
+```{r fig.height=15, fig.width=12}
+# UPSET PLOT --------------------
+
+final_graph = (graf_ce / graf_ne / graf_ne_ce) | (grafGO_ce / grafGO_ne / grafGO_ne_ce)
+final_graph
+
+```
+
+# GSEA
+
 ```{r}
-barplot(kk_ce)
-dotplot(kk_ne)
+for (v in c("_ce", "_ne", "_ne_ce")) {
+  
+  nome_res = paste0("res",v)
+  nome_gse = paste0("gse",v) 
+  nome_gseGO = paste0("gseGO",v)
+  
+  # 1. Estrarre l'intero dataframe dei risultati
+  res_df <- get(nome_res)
+  
+  # 2. Estrarre gli ID e pulirli (rimuovere i decimali dell'Ensembl)
+  universe_genes <- row.names(res_df)
+  universe_genes <- gsub("\\..*", "", universe_genes)
+  
+  # 3. Mappare gli ID da Ensembl a Entrez
+  universo.entrez <- mapIds(org.Hs.eg.db,
+                            keys = universe_genes,
+                            column = "ENTREZID",
+                            keytype = "ENSEMBL")
+  
+  # 4. Estrarre la metrica di ranking (il logFC) e associarle i nomi Entrez
+  # Assicurati che la colonna nel tuo res_df si chiami effettivamente "logFC"
+  gene_list <- res_df$log2FoldChange
+  names(gene_list) <- as.character(universo.entrez)
+  
+  # 5. Pulizia: rimuovere i geni che non hanno mappato (NA) e i duplicati
+  gene_list <- na.omit(gene_list)
+  gene_list <- gene_list[!duplicated(names(gene_list))]
+  
+  # 6. Ordinare la lista in ordine decrescente (Fondamentale per GSEA)
+  sort_tt <- sort(gene_list, decreasing = TRUE)
+  
+  # 7. Eseguire gseKEGG
+  assign(nome_gse, gseKEGG(geneList = sort_tt,
+                           organism = 'hsa',
+                           pvalueCutoff = 0.05,
+                           pAdjustMethod = "BH"))
+  # 8. con gene onthology
+  
+  assign(nome_gseGO, gseGO(geneList = sort_tt,
+          ont = "BP",
+          OrgDb='org.Hs.eg.db',
+          keyType = "ENTREZID",
+          pAdjustMethod = "BH"))
+  
+  
+  print(dim(get(nome_gse)))
+  print(dim(get(nome_gseGO)))
+}
 
-nrow(as.data.frame(kk_ce))
+gse_ce[1:10,]
+gse_ne[1:10,]
+gse_ne_ce[1:10,]
+```
+```{r}
+gse_ne@result[1:10,]
+gse_ce@result[1:10,]
+gse_ne_ce@result[1:10,]
+
+gseGO_ce@result[1:10,]
+gseGO_ne@result[1:10,]
+gseGO_ne_ce@result[1:10,]
 ```
 
-**CI SONO TROPPI CAZZO DI DEGS, NON Puo ESSERE DEG IL 60% DEL TRASCRITTOMA UMANO....**
+```{r fig.height=12, fig.width=8}
 
+
+# 1. Salvi i tuoi tre plot in tre oggetti separati
+plot_ce <- ridgeplot(gse_ce, showCategory = 10) + ggtitle("CE vs Sano")
+plot_ne <- ridgeplot(gse_ne, showCategory = 10) + ggtitle("NE vs Sano")
+plot_diff <- ridgeplot(gse_ne_ce, showCategory = 10) + ggtitle("CE vs NE")
+
+plot_ceGO <- ridgeplot(gseGO_ce, showCategory = 10) + ggtitle("CE vs Sano")
+plot_neGO <- ridgeplot(gseGO_ne, showCategory = 10) + ggtitle("NE vs Sano")
+plot_diffGO <- ridgeplot(gseGO_ne_ce, showCategory = 10) + ggtitle("CE vs NE")
+
+
+grafico_finale <- (plot_ce / plot_ne / plot_diff) 
+
+grafico_finale2 = (plot_ceGO / plot_neGO / plot_diffGO)
+
+# 3. Visualizzi e salvi
+grafico_finale
+grafico_finale2
+```
+
+capire chi sta a dx e chi a sx
 
 # ALTRO è PUNTI BONUSSSS
 
