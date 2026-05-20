@@ -1167,14 +1167,14 @@ for (v in c("_ce", "_ne", "_ne_ce")) {
   assign(nome_signentrez, as.character(get(nome_signentrez)))
   
   
-  assign(nome_ora, enrichKEGG(gene = sign.entrez,
+  assign(nome_ora, enrichKEGG(gene = get(nome_signentrez),  #CAMBIARE
                  universe = universo.entrez,
                  organism = 'hsa',
                  keyType = 'ncbi-geneid',
                  pvalueCutoff = 0.05,
                  pAdjustMethod = "BH"))
   
-  assign(nome_oraGO, enrichGO(gene = sign.entrez,
+  assign(nome_oraGO, enrichGO(gene = get(nome_signentrez),
               universe = universo.entrez,
               OrgDb = 'org.Hs.eg.db',
               keyType = "ENTREZID",
